@@ -17,12 +17,10 @@ def init_vcp_db():
     conn.commit()
     conn.close()
 
-# 起動時にDB初期化
 init_vcp_db()
 
 @app.route("/")
 def index():
-    # ルートURLにアクセスがあったら index.html を返す
     return send_from_directory('.', 'index.html')
 
 @app.route("/vcp/gate", methods=["POST"])
