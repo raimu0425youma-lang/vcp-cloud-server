@@ -7,7 +7,6 @@ from flask import Flask, jsonify, request, send_from_directory
 
 app = Flask(__name__, static_folder='.', static_url_path='')
 
-# PostgreSQL (Render) と SQLite (ローカル) の自動切り替え
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
 def get_db_connection():
@@ -25,7 +24,6 @@ def init_vcp_db():
     cursor = conn.cursor()
     
     if DATABASE_URL:
-        # PostgreSQL用構文
         cursor.execute('''CREATE TABLE IF NOT EXISTS agents (agent_id TEXT PRIMARY KEY)''')
         cursor.execute('''CREATE TABLE IF NOT EXISTS delegations 
                           (id SERIAL PRIMARY KEY, grantor TEXT, grantee TEXT, permission TEXT, active INTEGER)''')
@@ -44,7 +42,6 @@ def init_vcp_db():
         cursor.execute('''CREATE TABLE IF NOT EXISTS api_keys 
                           (api_key TEXT PRIMARY KEY, owner TEXT, active INTEGER)''')
     else:
-        # SQLite用構文
         cursor.execute('''CREATE TABLE IF NOT EXISTS agents (agent_id TEXT PRIMARY KEY)''')
         cursor.execute('''CREATE TABLE IF NOT EXISTS delegations 
                           (id INTEGER PRIMARY KEY AUTOINCREMENT, grantor TEXT, grantee TEXT, permission TEXT, active INTEGER)''')
@@ -70,6 +67,10 @@ def init_vcp_db():
         cursor.execute("INSERT INTO agents (agent_id) VALUES ('agent-002') ON CONFLICT (agent_id) DO NOTHING")
         cursor.execute("INSERT INTO agents (agent_id) VALUES ('agent-003') ON CONFLICT (agent_id) DO NOTHING")
         
+        cursor.execute("INSERT INTO delegations (grantor, grantee, permission, active) VALUES ('root', 'agent-001', 'transfer', 1) ON CONFLICT DO NOTHING")
+        cursor.execute("INSERT INTO delegations (grantor, grantee, permission, active) VALUES ('agent-001', 'agent-002', 'transfer', 1) ON CONFLICT DO NOTHING")
+        cursor.execute("INSERT INTO delegations (grantor, grantee, permission, active) VALUES ('agent-002', 'agent-003', 'transfer', 1) ON CONFLICT DO NOTHING")
+
         cursor.execute("INSERT INTO policies (permission, max_amount, approval_threshold) VALUES ('transfer', 1000.0, 10000.0) ON CONFLICT (permission) DO NOTHING")
         cursor.execute("INSERT INTO api_keys (api_key, owner, active) VALUES ('vcp_live_secret_key_001', 'system_admin', 1) ON CONFLICT (api_key) DO NOTHING")
     else:
@@ -77,6 +78,11 @@ def init_vcp_db():
         cursor.execute("INSERT OR IGNORE INTO agents VALUES ('agent-001')")
         cursor.execute("INSERT OR IGNORE INTO agents VALUES ('agent-002')")
         cursor.execute("INSERT OR IGNORE INTO agents VALUES ('agent-003')")
+        
+        cursor.execute("INSERT OR IGNORE INTO delegations (grantor, grantee, permission, active) VALUES ('root', 'agent-001', 'transfer', 1)")
+        cursor.execute("INSERT OR IGNORE INTO delegations (grantor, grantee, permission, active) VALUES ('agent-001', 'agent-002', 'transfer', 1)")
+        cursor.execute("INSERT OR IGNORE INTO delegations (grantor, grantee, permission, active) VALUES ('agent-002', 'agent-003', 'transfer', 1)")
+
         cursor.execute("INSERT OR IGNORE INTO policies VALUES ('transfer', 1000.0, 10000.0)")
         cursor.execute("INSERT OR IGNORE INTO api_keys VALUES ('vcp_live_secret_key_001', 'system_admin', 1)")
 
@@ -145,7 +151,6 @@ def gate():
     if not data:
         return jsonify({"status": "ERROR", "reason": "Invalid JSON payload"}), 400
 
-    # ステップ2: APIキー認証チェック
     client_api_key = data.get("api_key")
     conn = get_db_connection()
     cursor = conn.cursor()
