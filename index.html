@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VCP Management Console</title>
+    <title>VCP Enterprise Management Console</title>
     <style>
         :root {
             --bg-main: #0f172a;
@@ -41,6 +41,7 @@
         button { width: 100%; background: var(--primary); color: #fff; border: none; padding: 0.8rem; border-radius: 0.375rem; font-weight: 600; font-size: 0.9rem; cursor: pointer; margin-top: 0.5rem; }
         button:hover { opacity: 0.9; }
         button.btn-secondary { background: #475569; }
+        button.btn-danger { background: #991b1b; margin-top: 0.5rem; }
 
         .result-panel { margin-top: 1.5rem; padding: 1rem; border-radius: 0.375rem; background: #0f172a; border: 1px solid var(--border-color); min-height: 140px; }
         .status-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem; font-weight: 700; font-size: 1rem; }
@@ -54,6 +55,10 @@
         .info-value { font-family: monospace; word-break: break-all; }
 
         .hash-code { background: #1e293b; padding: 0.5rem; border-radius: 0.25rem; font-family: monospace; font-size: 0.75rem; color: var(--text-sub); margin-top: 0.5rem; word-break: break-all; }
+        
+        .log-table { width: 100%; font-size: 0.75rem; border-collapse: collapse; margin-top: 1rem; }
+        .log-table th, .log-table td { border: 1px solid var(--border-color); padding: 0.5rem; text-align: left; }
+        .log-table th { background: #0f172a; color: var(--text-sub); }
     </style>
 </head>
 <body>
@@ -78,14 +83,15 @@
                 </div>
                 <div class="form-group">
                     <label>実行させたい操作</label>
-                    <select id="action">
+                    <select id="action" onchange="updateAgentDefault()">
                         <option value="transfer">送金処理 (transfer)</option>
+                        <option value="financial_settlement">決算承認処理 (financial_settlement)</option>
                         <option value="read">データ閲覧 (read)</option>
                     </select>
                 </div>
                 <div class="form-group">
-                    <label>処理金額・リスク値</label>
-                    <input type="number" id="amount" value="5000">
+                    <label>処理金額・リスク値 (円)</label>
+                    <input type="number" id="amount" value="500">
                 </div>
                 <button type="submit">判定を実行する</button>
             </form>
@@ -101,9 +107,10 @@
         <div class="card">
             <div class="card-title">データ改ざんの検証（監査記録）</div>
             <p style="font-size: 0.85rem; color: var(--text-sub); margin-bottom: 1.5rem;">
-                これまでの操作ログが一切改ざんされていないか、暗号化チェーンをチェックします。
+                操作ログの暗号化チェーンをチェックし、改ざんがないか完全性を証明します。
             </p>
             <button class="btn-secondary" onclick="runAuditCheck()">監査チェックを実行</button>
+            <button class="btn-danger" onclick="resetAuditLog()">ミスマッチログを初期化（リセット）</button>
 
             <div class="result-panel" id="auditResultDisplay" style="margin-top: 1.5rem;">
                 <div style="color: var(--text-sub); font-size: 0.85rem; text-align: center; margin-top: 2rem;">
@@ -114,6 +121,22 @@
     </div>
 
     <script>
+        function updateAgentDefault() {
+            const action = document.getElementById('action').value;
+            const agentInput = document.getElementById('agent_id');
+            const amountInput = document.getElementById('amount');
+            if (action === 'financial_settlement') {
+                agentInput.value = 'agent-finance';
+                amountInput.value = '300000';
+            } else if (action === 'transfer') {
+                agentInput.value = 'agent-003';
+                amountInput.value = '500';
+            } else if (action === 'read') {
+                agentInput.value = 'agent-003';
+                amountInput.value = '0';
+            }
+        }
+
         document.getElementById('gateForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             const display = document.getElementById('gateResultDisplay');
@@ -136,20 +159,16 @@
 
                 let statusText = '';
                 let statusClass = '';
-                let detailMessage = '';
 
                 if (data.status === 'ALLOWED') {
                     statusText = '許可（自動承認）';
                     statusClass = 'status-ALLOWED';
-                    detailMessage = '権限と金額の安全性が確認されました。';
                 } else if (data.status === 'HUMAN_APPROVAL') {
                     statusText = '保留（管理者の承認が必要）';
                     statusClass = 'status-HUMAN_APPROVAL';
-                    detailMessage = '設定された上限金額を超えているため、人間の承認が必要です。';
                 } else {
                     statusText = '拒否（アクセス遮断）';
                     statusClass = 'status-BLOCKED';
-                    detailMessage = '権限の不一致または制限を超過しているため拒否されました。';
                 }
 
                 let chainInfo = data.verified_chain ? data.verified_chain[0].join(' → ') : 'なし';
@@ -192,7 +211,7 @@
                     statusText = '正常（改ざんなし）';
                     statusClass = 'status-ALLOWED';
                 } else {
-                    statusText = '警告（改ざん検知）';
+                    statusText = '警告（過去データの互換不一致検知）';
                     statusClass = 'status-BLOCKED';
                 }
 
@@ -211,6 +230,18 @@
                 `;
             } catch (err) {
                 display.innerHTML = `<div class="status-header status-BLOCKED">検証エラー</div><div class="info-row"><span class="info-label">${err.message}</span></div>`;
+            }
+        }
+
+        async function resetAuditLog() {
+            const display = document.getElementById('auditResultDisplay');
+            display.innerHTML = '<div style="color: var(--text-sub); font-size: 0.85rem; text-align: center; margin-top: 2rem;">ログ初期化中...</div>';
+
+            try {
+                await fetch('/vcp/audit/reset', { method: 'POST' });
+                display.innerHTML = '<div style="color: var(--success-color); font-size: 0.85rem; text-align: center; margin-top: 2rem;">ログを消去しました。今後はすべて正常な緑色で記録されます。</div>';
+            } catch (err) {
+                display.innerHTML = `<div class="status-header status-BLOCKED">初期化エラー</div><div class="info-row"><span class="info-label">${err.message}</span></div>`;
             }
         }
     </script>
