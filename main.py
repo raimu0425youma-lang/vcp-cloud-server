@@ -1,268 +1,509 @@
 import os
 import random
-from datetime import datetime
+import uuid
+import datetime
+import json
+import logging
+from enum import Enum
+from dataclasses import dataclass, field, asdict
+from typing import Dict, List, Any, Optional
 from flask import Flask, jsonify, request
 
-app = Flask(__name__)
+# ==========================================
+# 1. VCP CORE TYPES & CONTRACTS
+# ==========================================
 
-# --- バックエンド API エンドポイント ---
+class RecoveryContract(Enum):
+    REVERSIBLE = "REVERSIBLE"       # スナップショットによる完全復旧可能
+    COMPENSATABLE = "COMPENSATABLE" # 相殺アクションによる補償可能 (返金など)
+    DELAYABLE = "DELAYABLE"         # 実行遅延によるキャンセル可能
+    IRREVERSIBLE = "IRREVERSIBLE"   # 不可逆 (Human Approval 必須)
+
+@dataclass
+class IdentityContext:
+    agent_id: str
+    organization: str
+    trust_score: float
+    capabilities: List[str]
+
+@dataclass
+class EvidencePackage:
+    evidence_id: str
+    timestamp: str
+    agent_id: str
+    action_type: str
+    status: str
+    recovery_mode: str
+    intent_hash: str
+
+# ==========================================
+# 2. VCP KERNEL (8-Layer Enforcement Engine)
+# ==========================================
+
+class VCPKernel:
+    """
+    AI Actionの全ライフサイクルを制御する8層のVCPカーネル。
+    このエンジンを通らずに現実世界へのActionは実行できない。
+    """
+    def __init__(self):
+        self.evidence_ledger: List[EvidencePackage] = []
+        self.active_agents = {
+            "agent-mai-001": {"org": "MAI_CORP", "trust": 0.99, "cap": ["read", "write", "payment"]},
+            "agent-sub-002": {"org": "MAI_CORP", "trust": 0.75, "cap": ["read"]}
+        }
+        self.logger = logging.getLogger("VCP_KERNEL")
+
+    def process_action(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """8-Layer Sequential Verification Pipeline"""
+        try:
+            # [Layer 1] IDENTITY: エージェントの特定
+            agent_id = payload.get("agent_id")
+            if not agent_id or agent_id not in self.active_agents:
+                raise PermissionError(f"IDENTITY_REJECTED: Unregistered agent {agent_id}")
+            identity = IdentityContext(agent_id=agent_id, **self.active_agents[agent_id])
+
+            # [Layer 2] AUTHORITY: 権限血統図の確認
+            target_action = payload.get("action", "")
+            if target_action.split("_")[0] not in identity.capabilities:
+                raise PermissionError("AUTHORITY_REJECTED: Capability missing")
+
+            # [Layer 3] INTENT: 意図の検証 (AIの嘘を検知)
+            intent = payload.get("intent", "").lower()
+            if "delete" in target_action and "delete" not in intent and "remove" not in intent:
+                raise ValueError("INTENT_MISMATCH: Action payload contradicts stated intent.")
+
+            # [Layer 4] POLICY: 企業ポリシーエンジンの評価
+            amount = payload.get("parameters", {}).get("amount", 0)
+            if target_action == "payment_execute" and amount > 500000:
+                raise PermissionError("POLICY_VIOLATION: Payment amount exceeds auto-approval limit.")
+
+            # [Layer 5] DELEGATION: 委譲チェーンの検証
+            delegation_chain = payload.get("delegation_chain", [])
+            if len(delegation_chain) > 3:
+                raise PermissionError("DELEGATION_REJECTED: Chain too deep (Max 3)")
+
+            # [Layer 6] EXECUTION (AEG Enforcement)
+            execution_id = f"exec_{uuid.uuid4().hex[:8]}"
+            
+            # [Layer 8] RECOVERY: リカバリー契約の自動アサイン
+            recovery_mode = RecoveryContract.REVERSIBLE.value
+            if "payment" in target_action:
+                recovery_mode = RecoveryContract.COMPENSATABLE.value
+            elif "delete" in target_action:
+                recovery_mode = RecoveryContract.IRREVERSIBLE.value
+
+            # [Layer 7] EVIDENCE: 証拠チェーンの生成と保存
+            evidence = EvidencePackage(
+                evidence_id=f"ev_{uuid.uuid4().hex[:12]}",
+                timestamp=datetime.datetime.utcnow().isoformat() + "Z",
+                agent_id=identity.agent_id,
+                action_type=target_action,
+                status="ALLOWED",
+                recovery_mode=recovery_mode,
+                intent_hash=f"sha256:{hash(intent)}"
+            )
+            self.evidence_ledger.insert(0, evidence) # 最新を先頭に
+            if len(self.evidence_ledger) > 100: self.evidence_ledger.pop() # メモリ保護
+
+            return {
+                "status": "SUCCESS",
+                "execution_id": execution_id,
+                "evidence_id": evidence.evidence_id,
+                "recovery_contract": recovery_mode
+            }
+
+        except Exception as e:
+            # ブロックされた場合も証拠として残す
+            self.evidence_ledger.insert(0, EvidencePackage(
+                evidence_id=f"ev_blk_{uuid.uuid4().hex[:8]}",
+                timestamp=datetime.datetime.utcnow().isoformat() + "Z",
+                agent_id=payload.get("agent_id", "unknown"),
+                action_type=payload.get("action", "unknown"),
+                status="BLOCKED",
+                recovery_mode="N/A",
+                intent_hash="N/A"
+            ))
+            return {"status": "BLOCKED", "reason": str(e)}
+
+# ==========================================
+# 3. FLASK APPLICATION INIT
+# ==========================================
+
+app = Flask(__name__)
+vcp_kernel = VCPKernel()
+
+# ==========================================
+# 4. BACKEND API ENDPOINTS
+# ==========================================
+
+@app.route("/vcp/gate", methods=["POST"])
+def aec_gateway():
+    """
+    AEG (Action Enforcement Gateway) エンドポイント。
+    AIエージェントが現実世界にActionを起こす際は必ずここを叩く。
+    """
+    data = request.get_json()
+    if not data:
+        return jsonify({"status": "ERROR", "reason": "Invalid JSON"}), 400
+    
+    result = vcp_kernel.process_action(data)
+    status_code = 200 if result["status"] == "SUCCESS" else 403
+    return jsonify(result), status_code
+
+@app.route("/api/evidence/logs", methods=["GET"])
+def get_evidence_logs():
+    """ダッシュボード描画用の証拠（Evidence）ログ取得API"""
+    return jsonify([asdict(ev) for ev in vcp_kernel.evidence_ledger[:20]])
+
+@app.route("/api/system/metrics", methods=["GET"])
+def get_metrics():
+    """VCP Control Center 用の稼働メトリクス"""
+    total = len(vcp_kernel.evidence_ledger)
+    blocked = sum(1 for e in vcp_kernel.evidence_ledger if e.status == "BLOCKED")
+    return jsonify({
+        "total_actions": total,
+        "blocked_actions": blocked,
+        "active_agents": len(vcp_kernel.active_agents),
+        "system_status": "ONLINE",
+        "threat_level": "LOW" if blocked < 5 else "ELEVATED"
+    })
+
+# ==========================================
+# 5. FRONTEND: VCP CONTROL CENTER (HTML/CSS/JS)
+# ==========================================
 
 @app.route("/")
 def index():
-    return """<!DOCTYPE html>
-<html lang="ja">
-<head>
-    <meta charset="UTF-8">
-    <title>MAI ENTERPRISE CLOUD - GLOBAL CONTROL</title>
-    <style>
-        :root {
-            --bg-primary: #020617;
-            --bg-secondary: #0f172a;
-            --bg-tertiary: #1e293b;
-            --border-color: #334155;
-            --accent-cyan: #06b6d4;
-            --accent-cyan-hover: #22d3ee;
-            --accent-blue: #3b82f6;
-            --text-main: #f8fafc;
-            --text-muted: #94a3b8;
-            --success: #22c55e;
-            --warning: #f59e0b;
-            --danger: #ef4444;
-        }
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', system-ui, -apple-system, sans-serif; }
-        body { background-color: var(--bg-primary); color: var(--text-main); display: flex; height: 100vh; overflow: hidden; }
-
-        /* サイドバー */
-        .sidebar { width: 280px; background-color: var(--bg-secondary); border-right: 1px solid var(--border-color); display: flex; flex-direction: column; padding: 24px; }
-        .brand { font-size: 20px; font-weight: 800; color: var(--accent-cyan); letter-spacing: 1.5px; margin-bottom: 35px; display: flex; align-items: center; gap: 10px; }
-        .brand::before { content: ''; display: block; width: 10px; height: 10px; background: var(--accent-cyan); border-radius: 50%; box-shadow: 0 0 10px var(--accent-cyan); }
-        
-        .nav-menu { list-style: none; display: flex; flex-direction: column; gap: 8px; flex: 1; }
-        .nav-item { padding: 14px 18px; border-radius: 10px; color: var(--text-muted); cursor: pointer; transition: all 0.25s ease; font-size: 14px; font-weight: 500; display: flex; align-items: center; gap: 12px; }
-        .nav-item:hover, .nav-item.active { background-color: rgba(6, 182, 212, 0.12); color: var(--accent-cyan); border-left: 4px solid var(--accent-cyan); }
-
-        .system-pill { padding: 14px; background: rgba(34, 197, 94, 0.08); border: 1px solid rgba(34, 197, 94, 0.2); border-radius: 10px; font-size: 12px; color: var(--success); text-align: center; font-weight: 600; }
-
-        /* メインビュー */
-        .main-wrapper { flex: 1; display: flex; flex-direction: column; background-color: var(--bg-primary); overflow: hidden; }
-        .topbar { height: 70px; background-color: var(--bg-secondary); border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; padding: 0 35px; }
-        .topbar-title { font-size: 16px; font-weight: 600; color: var(--text-main); }
-        .user-badge { font-size: 13px; color: var(--text-muted); background: var(--bg-tertiary); padding: 6px 14px; border-radius: 20px; border: 1px solid var(--border-color); }
-
-        /* タブコンテンツエリア */
-        .content-area { flex: 1; padding: 30px; overflow-y: auto; display: none; }
-        .content-area.active { display: flex; flex-direction: column; gap: 20px; }
-
-        /* チャットビュー特有のレイアウト */
-        .chat-layout { display: flex; gap: 20px; height: 100%; }
-        .chat-main { flex: 3; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 14px; display: flex; flex-direction: column; overflow: hidden; }
-        .chat-messages { flex: 1; padding: 25px; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; }
-        .message { max-width: 80%; padding: 14px 18px; border-radius: 12px; font-size: 14px; line-height: 1.6; }
-        .message.ai { background-color: var(--bg-tertiary); color: var(--text-main); align-self: flex-start; border-bottom-left-radius: 4px; border: 1px solid var(--border-color); }
-        .message.user { background-color: var(--accent-blue); color: white; align-self: flex-end; border-bottom-right-radius: 4px; }
-        .chat-input-box { padding: 20px; background: var(--bg-secondary); border-top: 1px solid var(--border-color); display: flex; gap: 12px; }
-        .chat-input-box input { flex: 1; background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 10px; padding: 14px 18px; color: var(--text-main); font-size: 14px; outline: none; transition: border 0.2s; }
-        .chat-input-box input:focus { border-color: var(--accent-cyan); }
-        .btn-primary { background: var(--accent-cyan); color: var(--bg-primary); border: none; padding: 0 28px; border-radius: 10px; font-weight: 700; cursor: pointer; transition: background 0.2s; }
-        .btn-primary:hover { background: var(--accent-cyan-hover); }
-
-        /* サイドパネル（統計） */
-        .chat-side { flex: 1; display: flex; flex-direction: column; gap: 20px; }
-        .card { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 14px; padding: 20px; }
-        .card-title { font-size: 14px; font-weight: 700; color: var(--accent-cyan); margin-bottom: 15px; text-transform: uppercase; letter-spacing: 0.5px; }
-        .metric-row { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 13px; color: var(--text-muted); }
-        .metric-val { color: var(--text-main); font-weight: 600; }
-
-        /* その他のタブデザイン */
-        .grid-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; }
-        .stat-card { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 14px; padding: 24px; }
-        .stat-label { font-size: 13px; color: var(--text-muted); margin-bottom: 8px; }
-        .stat-number { font-size: 28px; font-weight: 800; color: var(--text-main); }
-        
-        .log-container { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 14px; padding: 20px; flex: 1; font-family: monospace; font-size: 12px; color: var(--accent-cyan); overflow-y: auto; }
-        .log-line { margin-bottom: 6px; border-bottom: 1px solid rgba(255,255,255,0.03); padding-bottom: 4px; }
-    </style>
-</head>
-<body>
-
-    <!-- サイドバー -->
-    <div class="sidebar">
-        <div class="brand">MAI CORE v4.0</div>
-        <ul class="nav-menu">
-            <li class="nav-item active" onclick="switchTab('chat', this)">💬 ニューラルチャット</li>
-            <li class="nav-item" onclick="switchTab('analytics', this)">📊 リアルタイム分析</li>
-            <li class="nav-item" onclick="switchTab('logs', this)">🖥️ システムログ</li>
-            <li class="nav-item" onclick="switchTab('settings', this)">⚙️ グローバル設定</li>
-        </ul>
-        <div class="system-pill">● サーバー稼働中 (99.99%)</div>
-    </div>
-
-    <!-- メインコンテンツ -->
-    <div class="main-wrapper">
-        <div class="topbar">
-            <div class="topbar-title" id="topbarTitle">MAI Enterprise Neural Chatroom</div>
-            <div class="user-badge">権限: スーパー管理者</div>
-        </div>
-
-        <!-- タブ1: チャット -->
-        <div id="tab-chat" class="content-area active" style="height: calc(100vh - 70px);">
-            <div class="chat-layout">
-                <div class="chat-main">
-                    <div class="chat-messages" id="chatBox">
-                        <div class="message ai">MAIグローバル・ニューラルコアが起動しました。数百万ユーザー規模の同時処理スタンバイ完了。ご指示をどうぞ。</div>
-                    </div>
-                    <div class="chat-input-box">
-                        <input type="text" id="userInput" placeholder="MAIへのコマンド、または質問を入力..." onkeypress="if(event.key==='Enter')sendChatMessage()">
-                        <button class="btn-primary" onclick="sendChatMessage()">送信</button>
-                    </div>
-                </div>
-                <div class="chat-side">
-                    <div class="card">
-                        <div class="card-title">リソース状況</div>
-                        <div class="metric-row"><span>CPU負荷</span><span class="metric-val" id="cpuLoad">12.4%</span></div>
-                        <div class="metric-row"><span>メモリ消費</span><span class="metric-val">1.8GB / 16GB</span></div>
-                        <div class="metric-row"><span>アクティブスレッド</span><span class="metric-val">1,024</span></div>
-                    </div>
-                    <div class="card">
-                        <div class="card-title">収益・スケーリング予測</div>
-                        <div class="metric-row"><span>月間推定アクティブ</span><span class="metric-val">2,450,000人</span></div>
-                        <div class="metric-row"><span>推定月商</span><span class="metric-val" style="color: var(--success);">￥184,500,000</span></div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- タブ2: 分析 -->
-        <div id="tab-analytics" class="content-area">
-            <div class="grid-cards">
-                <div class="stat-card">
-                    <div class="stat-label">総リクエスト数 (本日の累計)</div>
-                    <div class="stat-number">14,892,310</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">平均レスポンスタイム</div>
-                    <div class="stat-number">12ms</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">エラー発生率</div>
-                    <div class="stat-number" style="color: var(--success);">0.001%</div>
-                </div>
-            </div>
-        </div>
-
-        <!-- タブ3: ログ -->
-        <div id="tab-logs" class="content-area" style="height: calc(100vh - 70px);">
-            <div class="log-container" id="logBox">
-                <div class="log-line">[2026-08-21 19:00:01] [INFO] MAI Engine initialized successfully.</div>
-                <div class="log-line">[2026-08-21 19:00:05] [SECURITY] Global firewall rules applied.</div>
-                <div class="log-line">[2026-08-21 19:00:12] [CLUSTER] Node cluster synchronized across 4 regions.</div>
-            </div>
-        </div>
-
-        <!-- タブ4: 設定 -->
-        <div id="tab-settings" class="content-area">
-            <div class="card" style="max-width: 600px;">
-                <div class="card-title">システム環境設定</div>
-                <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 20px;">プラットフォーム全体の挙動やAIコアのパラメータを調整します。</p>
-                <div style="display: flex; flex-direction: column; gap: 15px;">
-                    <div>
-                        <label style="font-size: 13px; display: block; margin-bottom: 6px;">AIモデルモード</label>
-                        <select style="width: 100%; background: var(--bg-primary); border: 1px solid var(--border-color); color: var(--text-main); padding: 10px; border-radius: 8px;">
-                            <option>MAI-Ultra-v4 (最高精度・大規模処理)</option>
-                            <option>MAI-Turbo (超高速応答)</option>
-                        </select>
-                    </div>
-                    <button class="btn-primary" style="padding: 12px; margin-top: 10px;" onclick="alert('設定が正常に保存されました。')">変更を適用</button>
-                </div>
-            </div>
-        </div>
-
-    </div>
-
-    <script>
-        function switchTab(tabName, element) {
-            document.querySelectorAll('.content-area').forEach(el => el.classList.remove('active'));
-            document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
-            
-            document.getElementById('tab-' + tabName).classList.add('active');
-            element.classList.add('active');
-
-            const titles = {
-                'chat': 'MAI Enterprise Neural Chatroom',
-                'analytics': 'Real-time Global Analytics',
-                'logs': 'System Core Audit Logs',
-                'settings': 'Global System Configuration'
-            };
-            document.getElementById('topbarTitle').textContent = titles[tabName];
-        }
-
-        async function sendChatMessage() {
-            const input = document.getElementById('userInput');
-            const chatBox = document.getElementById('chatBox');
-            const text = input.value.trim();
-            if(!text) return;
-
-            const userDiv = document.createElement('div');
-            userDiv.className = 'message user';
-            userDiv.textContent = text;
-            chatBox.appendChild(userDiv);
-            input.value = '';
-            chatBox.scrollTop = chatBox.scrollHeight;
-
-            try {
-                const response = await fetch('/api/chat', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ message: text })
-                });
-                const data = await response.json();
-
-                const aiDiv = document.createElement('div');
-                aiDiv.className = 'message ai';
-                aiDiv.textContent = data.reply;
-                chatBox.appendChild(aiDiv);
-                chatBox.scrollTop = chatBox.scrollHeight;
-            } catch (err) {
-                const errDiv = document.createElement('div');
-                errDiv.className = 'message ai';
-                errDiv.textContent = "通信エラーが発生しました。バックエンドとの接続を確認してください。";
-                chatBox.appendChild(errDiv);
+    """
+    VCP Control Center Dashboard
+    画像の配色テーマ（#020617等）を完全再現し、8層アーキテクチャの監視画面を生成。
+    """
+    html_content = """
+    <!DOCTYPE html>
+    <html lang="ja">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>VCP Enterprise Control Center - MAI</title>
+        <style>
+            :root {
+                --bg-primary: #020617;
+                --bg-secondary: #0f172a;
+                --bg-tertiary: #1e293b;
+                --border-color: #334155;
+                --accent-cyan: #06b6d4;
+                --accent-cyan-hover: #22d3ee;
+                --accent-blue: #3b82f6;
+                --text-main: #f8fafc;
+                --text-muted: #94a3b8;
+                --status-allowed: #10b981;
+                --status-blocked: #ef4444;
             }
-        }
+            body {
+                background-color: var(--bg-primary);
+                color: var(--text-main);
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                margin: 0;
+                padding: 0;
+                display: flex;
+                height: 100vh;
+                overflow: hidden;
+            }
+            /* Sidebar */
+            .sidebar {
+                width: 260px;
+                background-color: var(--bg-secondary);
+                border-right: 1px solid var(--border-color);
+                display: flex;
+                flex-direction: column;
+                padding: 20px 0;
+            }
+            .sidebar-logo {
+                font-size: 1.5rem;
+                font-weight: bold;
+                color: var(--accent-cyan);
+                padding: 0 20px 20px;
+                border-bottom: 1px solid var(--border-color);
+                letter-spacing: 2px;
+            }
+            .sidebar-menu {
+                list-style: none;
+                padding: 0;
+                margin: 20px 0;
+            }
+            .sidebar-menu li {
+                padding: 15px 20px;
+                cursor: pointer;
+                transition: background 0.2s;
+                color: var(--text-muted);
+            }
+            .sidebar-menu li:hover, .sidebar-menu li.active {
+                background-color: var(--bg-tertiary);
+                color: var(--accent-cyan);
+                border-left: 3px solid var(--accent-cyan);
+            }
+            /* Main Content */
+            .main-content {
+                flex: 1;
+                display: flex;
+                flex-direction: column;
+                overflow-y: auto;
+            }
+            .topbar {
+                height: 60px;
+                background-color: var(--bg-secondary);
+                border-bottom: 1px solid var(--border-color);
+                display: flex;
+                align-items: center;
+                padding: 0 30px;
+                justify-content: space-between;
+            }
+            .content-area {
+                padding: 30px;
+            }
+            /* Dashboard Grid */
+            .metrics-grid {
+                display: grid;
+                grid-template-columns: repeat(4, 1fr);
+                gap: 20px;
+                margin-bottom: 30px;
+            }
+            .metric-card {
+                background-color: var(--bg-secondary);
+                border: 1px solid var(--border-color);
+                border-radius: 8px;
+                padding: 20px;
+            }
+            .metric-title {
+                color: var(--text-muted);
+                font-size: 0.9rem;
+                text-transform: uppercase;
+                margin-bottom: 10px;
+            }
+            .metric-value {
+                font-size: 2rem;
+                font-weight: bold;
+                color: var(--accent-cyan);
+            }
+            /* 8-Layer Architecture Visualization */
+            .layer-section {
+                background-color: var(--bg-secondary);
+                border: 1px solid var(--border-color);
+                border-radius: 8px;
+                padding: 20px;
+                margin-bottom: 30px;
+            }
+            .layer-title {
+                margin-top: 0;
+                color: var(--text-main);
+                border-bottom: 1px solid var(--border-color);
+                padding-bottom: 10px;
+                margin-bottom: 20px;
+            }
+            .layers-container {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+            }
+            .layer-box {
+                background-color: var(--bg-tertiary);
+                border: 1px solid var(--accent-blue);
+                padding: 10px;
+                border-radius: 6px;
+                font-size: 0.85rem;
+                text-align: center;
+                flex: 1;
+                margin: 0 5px;
+                color: var(--accent-cyan);
+            }
+            /* Evidence Ledger Table */
+            .table-container {
+                background-color: var(--bg-secondary);
+                border: 1px solid var(--border-color);
+                border-radius: 8px;
+                padding: 20px;
+            }
+            table {
+                width: 100%;
+                border-collapse: collapse;
+                margin-top: 15px;
+            }
+            th, td {
+                padding: 12px 15px;
+                text-align: left;
+                border-bottom: 1px solid var(--border-color);
+                font-size: 0.9rem;
+            }
+            th {
+                color: var(--text-muted);
+                text-transform: uppercase;
+                font-weight: normal;
+            }
+            .badge {
+                padding: 4px 8px;
+                border-radius: 4px;
+                font-size: 0.8rem;
+                font-weight: bold;
+            }
+            .badge.allowed { background-color: rgba(16, 185, 129, 0.2); color: var(--status-allowed); }
+            .badge.blocked { background-color: rgba(239, 68, 68, 0.2); color: var(--status-blocked); }
+            .badge.mode { background-color: rgba(59, 130, 246, 0.2); color: var(--accent-blue); }
+        </style>
+    </head>
+    <body>
+        <div class="sidebar">
+            <div class="sidebar-logo">VCP CONTROL</div>
+            <ul class="sidebar-menu">
+                <li class="active">Dashboard</li>
+                <li>Authority Graph</li>
+                <li>Policy Engine</li>
+                <li>Evidence Audit</li>
+                <li>Agent Registry</li>
+            </ul>
+        </div>
+        
+        <div class="main-content">
+            <div class="topbar">
+                <div style="font-size: 1.2rem;">Control Plane / Overview</div>
+                <div>Status: <span style="color: var(--status-allowed);">● ONLINE</span></div>
+            </div>
+            
+            <div class="content-area">
+                <!-- Metrics -->
+                <div class="metrics-grid">
+                    <div class="metric-card">
+                        <div class="metric-title">Total AI Actions</div>
+                        <div class="metric-value" id="val-total">0</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-title">Blocked by VCP</div>
+                        <div class="metric-value" id="val-blocked" style="color: var(--status-blocked);">0</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-title">Active Agents</div>
+                        <div class="metric-value" id="val-agents">0</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-title">Threat Level</div>
+                        <div class="metric-value" id="val-threat">LOW</div>
+                    </div>
+                </div>
 
-        // 定期的にCPU負荷を擬似変動させる
-        setInterval(() => {
-            const load = (10 + Math.random() * 15).toFixed(1);
-            const cpuEl = document.getElementById('cpuLoad');
-            if(cpuEl) cpuEl.textContent = load + '%';
-        }, 3000);
-    </script>
-</body>
-</html>"""
+                <!-- 8 Layers Visual -->
+                <div class="layer-section">
+                    <h3 class="layer-title">VCP 8-Layer Enforcement Pipeline</h3>
+                    <div class="layers-container">
+                        <div class="layer-box">1. Identity</div>➔
+                        <div class="layer-box">2. Authority</div>➔
+                        <div class="layer-box">3. Intent</div>➔
+                        <div class="layer-box">4. Policy</div>➔
+                        <div class="layer-box">5. Delegation</div>➔
+                        <div class="layer-box" style="border-color: var(--status-blocked);">6. Execution(AEG)</div>➔
+                        <div class="layer-box">7. Evidence</div>➔
+                        <div class="layer-box">8. Recovery</div>
+                    </div>
+                </div>
 
-@app.route("/api/chat", methods=["POST"])
-def api_chat():
-    data = request.get_json() or {}
-    user_msg = data.get("message", "")
-    
-    # 本格的なバックエンド処理のシミュレーション応答
-    responses = [
-        f"「{user_msg}」のリクエストを検知しました。マルチスレッド処理により最適化を実行中です。",
-        f"データ解析完了：「{user_msg}」に基づくスケーリングプランを適用しました。順調に収益化ロジックが稼働しています。",
-        f"了解いたしました。「{user_msg}」のシステム連携を確立します。数百万規模のトラフィックにも完全耐性があります。",
-    ]
-    reply = random.choice(responses)
-    
-    return jsonify({
-        "status": "success",
-        "reply": reply,
-        "timestamp": datetime.now().isoformat()
-    })
+                <!-- Evidence Ledger -->
+                <div class="table-container">
+                    <h3 class="layer-title">Live Evidence Ledger (Audit Trail)</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Timestamp</th>
+                                <th>Evidence ID</th>
+                                <th>Agent ID</th>
+                                <th>Action</th>
+                                <th>Recovery Contract</th>
+                                <th>Decision</th>
+                            </tr>
+                        </thead>
+                        <tbody id="ledger-body">
+                            <!-- JS injected rows -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
 
-@app.route("/health")
-def health():
-    return jsonify({"status": "ok", "system": "MAI Global Enterprise Core", "version": "4.0.0"})
+        <script>
+            // API Polling function to keep dashboard live
+            async function refreshDashboard() {
+                try {
+                    // Fetch Metrics
+                    const resMetrics = await fetch('/api/system/metrics');
+                    const metrics = await resMetrics.json();
+                    document.getElementById('val-total').innerText = metrics.total_actions;
+                    document.getElementById('val-blocked').innerText = metrics.blocked_actions;
+                    document.getElementById('val-agents').innerText = metrics.active_agents;
+                    document.getElementById('val-threat').innerText = metrics.threat_level;
+                    if(metrics.threat_level === "ELEVATED") {
+                        document.getElementById('val-threat').style.color = "var(--status-blocked)";
+                    }
+
+                    // Fetch Evidence Logs
+                    const resLogs = await fetch('/api/evidence/logs');
+                    const logs = await resLogs.json();
+                    const tbody = document.getElementById('ledger-body');
+                    tbody.innerHTML = '';
+                    
+                    if (logs.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color: var(--text-muted);">No actions recorded yet.</td></tr>';
+                    } else {
+                        logs.forEach(log => {
+                            const date = new Date(log.timestamp).toLocaleTimeString();
+                            const statusBadge = log.status === 'ALLOWED' 
+                                ? `<span class="badge allowed">ALLOWED</span>` 
+                                : `<span class="badge blocked">BLOCKED</span>`;
+                            const recoveryBadge = `<span class="badge mode">${log.recovery_mode}</span>`;
+                            
+                            const tr = document.createElement('tr');
+                            tr.innerHTML = `
+                                <td>${date}</td>
+                                <td style="font-family: monospace; color: var(--text-muted);">${log.evidence_id}</td>
+                                <td>${log.agent_id}</td>
+                                <td>${log.action_type}</td>
+                                <td>${recoveryBadge}</td>
+                                <td>${statusBadge}</td>
+                            `;
+                            tbody.appendChild(tr);
+                        });
+                    }
+                } catch (e) {
+                    console.error("Failed to fetch dashboard data:", e);
+                }
+            }
+
+            // Test function to simulate AI agent hitting the AEG Gateway
+            async function simulateAIAction() {
+                const actions = [
+                    { agent_id: "agent-mai-001", intent: "read db", action: "read_users" },
+                    { agent_id: "agent-mai-001", intent: "pay vendor", action: "payment_execute", parameters: {amount: 10000} },
+                    { agent_id: "agent-sub-002", intent: "delete log", action: "delete_files" } // Should fail authority
+                ];
+                const testAction = actions[Math.floor(Math.random() * actions.length)];
+                
+                await fetch('/vcp/gate', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(testAction)
+                });
+                refreshDashboard();
+            }
+
+            // Initialize
+            refreshDashboard();
+            setInterval(refreshDashboard, 5000); // Auto refresh every 5s
+            
+            // For demo purposes: Simulate an AI action every 10 seconds
+            setInterval(simulateAIAction, 10000);
+        </script>
+    </body>
+    </html>
+    """
+    return html_content
 
 if __name__ == "__main__":
+    # Render や Heroku などのPaaS環境では環境変数 PORT を使用する
     port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+    app.run(host="0.0.0.0", port=port, debug=True)
