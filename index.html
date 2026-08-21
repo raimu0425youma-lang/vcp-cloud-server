@@ -1,219 +1,118 @@
-# 1. ルート直下の index.html を圧倒的に洗練された最高峰のUIに完全上書き
-Set-Content -Path "index.html" -Value '<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VCP ENTERPRISE CONTROL CENTER | CORE SYSTEM</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <title>VCP Enterprise Control Center | AI Governance Grid</title>
     <style>
         :root {
-            --bg-deep: #05070b;
-            --bg-card: #0f172a;
-            --border-color: #1e293b;
-            --accent-blue: #3b82f6;
-            --accent-glow: rgba(59, 130, 246, 0.4);
-            --accent-green: #10b981;
-            --text-main: #f8fafc;
-            --text-muted: #64748b;
+            --bg-color: #0b0f19;
+            --card-bg: #111827;
+            --border-color: #1f2937;
+            --accent-glow: #3b82f6;
+            --text-main: #f3f4f6;
+            --text-muted: #9ca3af;
+            --success: #10b981;
+            --danger: #ef4444;
         }
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-        body { background-color: var(--bg-deep); color: var(--text-main); min-height: 100vh; padding: 24px; display: flex; flex-direction: column; gap: 24px; }
-        
-        header { display: flex; justify-content: space-between; align-items: center; background: var(--bg-card); border: 1px solid var(--border-color); padding: 16px 24px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
-        .logo-area { display: flex; align-items: center; gap: 12px; }
-        .logo-icon { width: 12px; height: 12px; background: var(--accent-blue); border-radius: 50%; box-shadow: 0 0 12px var(--accent-blue); animation: pulse 2s infinite; }
-        h1 { font-size: 18px; font-weight: 700; letter-spacing: 0.1em; color: #fff; }
-        
-        .system-status { display: flex; align-items: center; gap: 8px; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); padding: 6px 14px; border-radius: 20px; font-size: 12px; color: var(--accent-green); font-weight: 600; }
-        .status-dot { width: 8px; height: 8px; background: var(--accent-green); border-radius: 50%; box-shadow: 0 0 8px var(--accent-green); }
-
-        .dashboard-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 20px; }
-        .card { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 24px; display: flex; flex-direction: column; gap: 16px; box-shadow: 0 4px 16px rgba(0,0,0,0.3); transition: border-color 0.3s; }
-        .card:hover { border-color: rgba(59, 130, 246, 0.5); }
-        .card h2 { font-size: 13px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; }
-
-        .form-group { display: flex; flex-direction: column; gap: 6px; }
-        label { font-size: 11px; color: var(--text-muted); font-weight: 500; }
-        input, textarea { background: #0b0f19; border: 1px solid var(--border-color); color: var(--text-main); padding: 10px 14px; border-radius: 8px; font-size: 14px; transition: all 0.2s; }
-        input:focus, textarea:focus { outline: none; border-color: var(--accent-blue); box-shadow: 0 0 10px var(--accent-glow); }
-
-        .btn { background: var(--accent-blue); color: white; border: none; padding: 12px; border-radius: 8px; font-weight: 600; cursor: pointer; transition: all 0.2s; text-align: center; }
-        .btn:hover { background: #2563eb; box-shadow: 0 0 15px var(--accent-glow); transform: translateY(-1px); }
-
-        .output-box { background: #05070b; border: 1px solid var(--border-color); padding: 14px; border-radius: 8px; font-family: "Courier New", monospace; font-size: 12px; color: #38bdf8; min-height: 60px; max-height: 120px; overflow-y: auto; white-space: pre-wrap; }
-        .chart-wrapper { position: relative; height: 220px; width: 100%; }
-
-        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        body { background-color: var(--bg-color); color: var(--text-main); padding: 2rem; min-height: 100vh; }
+        header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; border-bottom: 1px solid var(--border-color); padding-bottom: 1rem; }
+        h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: 0.05em; display: flex; align-items: center; gap: 0.5rem; }
+        .status-badge { font-size: 0.75rem; background: rgba(16, 185, 129, 0.1); color: var(--success); border: 1px solid var(--success); padding: 0.25rem 0.75rem; border-radius: 9999px; font-weight: 600; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.5rem; }
+        .card { background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 1rem; padding: 1.5rem; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
+        .card h2 { font-size: 1.1rem; margin-bottom: 1rem; color: var(--text-main); border-left: 3px solid var(--accent-glow); padding-left: 0.5rem; }
+        .form-group { margin-bottom: 1rem; }
+        label { display: block; font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.3rem; }
+        input, select { width: 100%; padding: 0.75rem; background: #030712; border: 1px solid var(--border-color); color: white; border-radius: 0.5rem; font-size: 0.95rem; }
+        input:focus, select:focus { outline: none; border-color: var(--accent-glow); }
+        button { width: 100%; background: #2563eb; color: white; border: none; padding: 0.75rem; border-radius: 0.5rem; font-weight: 600; cursor: pointer; transition: background 0.2s; margin-top: 0.5rem; }
+        button:hover { background: #1d4ed8; }
+        .result-box { margin-top: 1rem; background: #030712; border: 1px solid var(--border-color); border-radius: 0.5rem; padding: 1rem; font-family: monospace; font-size: 0.85rem; min-height: 80px; color: var(--text-muted); word-break: break-all; }
+        .result-box.allowed { color: var(--success); border-color: var(--success); }
+        .result-box.blocked { color: var(--danger); border-color: var(--danger); }
     </style>
 </head>
 <body>
-
     <header>
-        <div class="logo-area">
-            <div class="logo-icon"></div>
-            <h1>VCP ENTERPRISE CONTROL CENTER</h1>
-        </div>
-        <div class="system-status">
-            <div class="status-dot"></div>
-            <span id="health-text">CORE ONLINE (99.98%)</span>
-        </div>
+        <h1>⚡ VCP ENTERPRISE CONTROL CENTER</h1>
+        <div class="status-badge">CORE ONLINE (DETERMINISTIC GRID)</div>
     </header>
 
-    <div class="dashboard-grid">
-        <!-- 財務・複利シミュレーター -->
+    <div class="grid">
+        <!-- VCP Gate Simulator -->
         <div class="card">
-            <h2>Financial Compound Engine</h2>
-            <div class="form-group">
-                <label>Initial Capital (JPY / USD)</label>
-                <input type="number" id="sim-init" value="1000000">
-            </div>
-            <div class="form-group">
-                <label>Annual Growth Rate (%)</label>
-                <input type="number" id="sim-rate" value="15" step="0.1">
-            </div>
-            <div class="form-group">
-                <label>Time Horizon (Years)</label>
-                <input type="number" id="sim-years" value="15">
-            </div>
-            <button class="btn" onclick="runSimulation()">Execute Compound Simulation</button>
-            <div class="output-box" id="sim-output">Awaiting calculation parameters...</div>
+            <h2>VCP Gate Security Test</h2>
+            <form id="vcpForm">
+                <div class="form-group">
+                    <label>Agent ID</label>
+                    <input type="text" id="agent_id" value="agent-001">
+                </div>
+                <div class="form-group">
+                    <label>Target Action</label>
+                    <select id="action">
+                        <option value="transfer">transfer (Financial)</option>
+                        <option value="read">read (Data Access)</option>
+                        <option value="delete_files">delete_files (High Risk)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Amount / Risk Value</label>
+                    <input type="number" id="amount" value="500">
+                </div>
+                <button type="submit">Dispatch to VCP Core</button>
+            </form>
+            <div id="vcpResult" class="result-box">Awaiting security dispatch...</div>
         </div>
 
-        <!-- AI ニューラルプロセッサー -->
+        <!-- System Telemetry & Metrics -->
         <div class="card">
-            <h2>Neural Query Processor</h2>
-            <div class="form-group">
-                <label>Execution Prompt</label>
-                <textarea id="ai-input" rows="3" placeholder="Enter system directive or AI query..."></textarea>
+            <h2>Grid Telemetry & Status</h2>
+            <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1rem;">
+                Zero-Trust Deterministic Security Layer is actively protecting execution boundaries. No external API latency.
+            </p>
+            <div style="background: #030712; padding: 1rem; border-radius: 0.5rem; border: 1px solid var(--border-color);">
+                <div style="font-size: 0.8rem; color: var(--text-muted);">ACTIVE TENANT</div>
+                <div style="font-size: 1.1rem; font-weight: bold; margin-bottom: 0.5rem;">Enterprise-Global-Root</div>
+                <div style="font-size: 0.8rem; color: var(--text-muted);">ENFORCEMENT ENGINE</div>
+                <div style="font-size: 1.1rem; font-weight: bold;">Deterministic Policy V1</div>
             </div>
-            <button class="btn" onclick="processAIQuery()">Dispatch to Backend Core</button>
-            <div class="output-box" id="ai-output">System idle. Ready for queries.</div>
-        </div>
-
-        <!-- リアルタイム・アナリティクス -->
-        <div class="card">
-            <h2>System Telemetry & Analytics</h2>
-            <div class="chart-wrapper">
-                <canvas id="telemetryChart"></canvas>
-            </div>
-            <button class="btn" style="background: #1e293b; border: 1px solid var(--border-color);" onclick="refreshTelemetry()">Refresh Telemetry</button>
         </div>
     </div>
 
     <script>
-        let telemetryChart;
-        window.onload = () => {
-            initChart();
-            checkHealth();
-        };
+        document.getElementById('vcpForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const resultBox = document.getElementById('vcpResult');
+            resultBox.className = 'result-box';
+            resultBox.innerText = 'Evaluating security constraints...';
 
-        function initChart() {
-            const ctx = document.getElementById("telemetryChart").getContext("2d");
-            telemetryChart = new Chart(ctx, {
-                type: "line",
-                data: {
-                    labels: ["00:00", "03:00", "06:00", "09:00", "12:00", "15:00", "18:00"],
-                    datasets: [{
-                        label: "CPU Load (%)",
-                        data: [24, 28, 22, 45, 62, 38, 30],
-                        borderColor: "#3b82f6",
-                        backgroundColor: "rgba(59, 130, 246, 0.1)",
-                        fill: true,
-                        tension: 0.4
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { labels: { color: "#94a3b8", font: { size: 11 } } } },
-                    scales: {
-                        x: { grid: { color: "#1e293b" }, ticks: { color: "#64748b" } },
-                        y: { grid: { color: "#1e293b" }, ticks: { color: "#64748b" } }
-                    }
-                }
-            });
-        }
+            const payload = {
+                agent_id: document.getElementById('agent_id').value,
+                action: document.getElementById('action').value,
+                amount: parseFloat(document.getElementById('amount').value)
+            };
 
-        function refreshTelemetry() {
-            const newData = Array.from({length: 7}, () => Math.floor(Math.random() * 60) + 20);
-            telemetryChart.data.datasets[0].data = newData;
-            telemetryChart.update();
-        }
-
-        async function checkHealth() {
             try {
-                const res = await fetch("/api/health");
-                const data = await res.json();
-                document.getElementById("health-text").innerText = `SYSTEM ${data.status.toUpperCase()} (${data.system})`;
-            } catch (e) {
-                document.getElementById("health-text").innerText = "CORE ONLINE (LOCAL SYNC)";
-            }
-        }
-
-        function runSimulation() {
-            const init = parseFloat(document.getElementById("sim-init").value);
-            const rate = parseFloat(document.getElementById("sim-rate").value) / 100;
-            const years = parseInt(document.getElementById("sim-years").value);
-            const total = init * Math.pow((1 + rate), years);
-            const profit = total - init;
-            document.getElementById("sim-output").innerText = `[SUCCESS] Projection Complete:\n- Final Value: ${total.toLocaleString(undefined, {maximumFractionDigits: 2})}\n- Total Profit: +${profit.toLocaleString(undefined, {maximumFractionDigits: 2})}`;
-        }
-
-        async function processAIQuery() {
-            const prompt = document.getElementById("ai-input").value;
-            const out = document.getElementById("ai-output");
-            if (!prompt) {
-                out.innerText = "[ERROR] Prompt cannot be empty.";
-                return;
-            }
-            out.innerText = "[PROCESSING] Communicating with backend core...";
-            try {
-                const res = await fetch("/api/ai/process", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ prompt })
+                const response = await fetch('/vcp/gate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
                 });
-                const data = await res.json();
-                out.innerText = `[RESPONSE] ${data.result}`;
+                const data = await response.json();
+                
+                resultBox.innerText = JSON.stringify(data, null, 2);
+                if (data.status === 'ALLOWED') {
+                    resultBox.classList.add('allowed');
+                } else {
+                    resultBox.classList.add('blocked');
+                }
             } catch (err) {
-                out.innerText = `[LOCAL EXECUTION] Handled: "${prompt}" -> Status: Verified.`;
+                resultBox.innerText = 'Error connecting to VCP Core: ' + err.message;
+                resultBox.classList.add('blocked');
             }
-        }
+        });
     </script>
 </body>
-</html>'
-
-# 2. サーバー側の main.py もエラーなしで完璧に連動する堅牢なコードに上書き
-Set-Content -Path "main.py" -Value 'import os
-from flask import Flask, jsonify, request, send_file
-from flask_cors import CORS
-
-app = Flask(__name__)
-CORS(app)
-
-@app.route("/")
-def index():
-    return send_file("index.html")
-
-@app.route("/api/health", methods=["GET"])
-def health_check():
-    return jsonify({"status": "online", "system": "VCP Enterprise Core v4.2"})
-
-@app.route("/api/ai/process", methods=["POST"])
-def ai_process():
-    data = request.get_json() or {}
-    prompt = data.get("prompt", "")
-    return jsonify({
-        "status": "success",
-        "result": f"Neural Core successfully computed: {prompt} [Secure Pipeline Active]"
-    })
-
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)'
-
-# 3. GitHubへ一発プッシュ
-git add index.html main.py
-git commit -m "feat: deploy ultra-premium vcp enterprise control center core"
-git push
+</html>
