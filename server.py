@@ -9,13 +9,9 @@ CORS(app)
 def index():
     if os.path.exists("static/index.html"):
         return send_file("static/index.html")
-    return send_file("index.html")
-
-@app.route("/popup.html")
-def popup():
-    if os.path.exists("static/popup.html"):
-        return send_file("static/popup.html")
-    return send_file("popup.html")
+    if os.path.exists("index.html"):
+        return send_file("index.html")
+    return "OK"
 
 @app.route("/api/health", methods=["GET"])
 def health_check():
@@ -24,8 +20,7 @@ def health_check():
 @app.route("/api/ai/process", methods=["POST"])
 def ai_process():
     data = request.get_json() or {}
-    prompt = data.get("prompt", "")
-    return jsonify({"status": "success", "result": f"Processed via API: {prompt}"})
+    return jsonify({"status": "success", "result": f"Processed: {data.get(\"prompt\", \"\")}"})
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))

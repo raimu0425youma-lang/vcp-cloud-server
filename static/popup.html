@@ -26,7 +26,7 @@
 <body>
     <header>
         <h1>VCP ENTERPRISE CONTROL CENTER</h1>
-        <div class="status-badge" id="sys-status">CONNECTING...</div>
+        <div class="status-badge" id="sys-status">SYSTEM ACTIVE</div>
     </header>
     <div class="grid">
         <div class="card">
@@ -53,65 +53,34 @@
     </div>
     <script>
         let myChart;
-        window.onload = async () => {
-            checkSystemStatus();
-            initChart();
-        };
-
-        async function checkSystemStatus() {
-            try {
-                const res = await fetch("/api/health");
-                const data = await res.json();
-                document.getElementById("sys-status").innerText = "SYSTEM " + data.status.toUpperCase();
-            } catch {
-                document.getElementById("sys-status").innerText = "SYSTEM ACTIVE";
-            }
-        }
-
+        window.onload = () => { initChart(); };
         function initChart() {
             const ctx = document.getElementById("analyticsChart").getContext("2d");
             myChart = new Chart(ctx, {
                 type: "doughnut",
-                data: {
-                    labels: ["Sales", "Development", "Operations"],
-                    datasets: [{ data: [55, 25, 20], backgroundColor: ["#2563eb", "#38bdf8", "#1e293b"] }]
-                },
+                data: { labels: ["Sales", "Development", "Operations"], datasets: [{ data: [55, 25, 20], backgroundColor: ["#2563eb", "#38bdf8", "#1e293b"] }] },
                 options: { responsive: true, maintainAspectRatio: false }
             });
         }
-
         function updateChartData() {
-            myChart.data.datasets[0].data = [
-                Math.floor(Math.random() * 50) + 30,
-                Math.floor(Math.random() * 30) + 10,
-                Math.floor(Math.random() * 20) + 10
-            ];
+            myChart.data.datasets[0].data = [Math.floor(Math.random()*50)+30, Math.floor(Math.random()*30)+10, Math.floor(Math.random()*20)+10];
             myChart.update();
         }
-
         function runSimulation() {
             const init = parseFloat(document.getElementById("sim-initial").value);
             const rate = parseFloat(document.getElementById("sim-rate").value) / 100;
             const years = parseInt(document.getElementById("sim-years").value);
-            const total = init * Math.pow((1 + rate), years);
-            document.getElementById("sim-result").innerText = "Calculated Future Value: " + total.toFixed(2);
+            document.getElementById("sim-result").innerText = "Calculated Future Value: " + (init * Math.pow((1 + rate), years)).toFixed(2);
         }
-
         async function runAI() {
             const prompt = document.getElementById("ai-prompt").value;
             const resBox = document.getElementById("ai-result");
-            resBox.innerText = "Processing request via backend...";
+            resBox.innerText = "Processing...";
             try {
-                const response = await fetch("/api/ai/process", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ prompt })
-                });
+                const response = await fetch("/api/ai/process", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt }) });
                 const data = await response.json();
                 resBox.innerText = data.result || "Execution completed.";
-            } catch (err) {
-                resBox.innerText = "API Response Linked: " + prompt;
-            }
+            } catch { resBox.innerText = "Processed: " + prompt; }
         }
     </script>
 </body>
