@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VCP Enterprise Control Center | Final Grid</title>
+    <title>VCP Enterprise Control Center | Production Grid</title>
     <style>
         :root {
             --bg-color: #0b0f19;
@@ -41,13 +41,17 @@
 <body>
     <header>
         <h1>VCP ENTERPRISE CONTROL CENTER</h1>
-        <div class="status-badge">SECURE GRID ONLINE</div>
+        <div class="status-badge">PRODUCTION GRID ONLINE</div>
     </header>
 
     <div class="grid">
         <div class="card">
             <h2>セキュリティ・ゲート評価テスト</h2>
             <form id="vcpForm">
+                <div class="form-group">
+                    <label>APIキー (初期値: vcp_live_secret_key_001)</label>
+                    <input type="text" id="api_key" value="vcp_live_secret_key_001">
+                </div>
                 <div class="form-group">
                     <label>エージェントID</label>
                     <input type="text" id="agent_id" value="agent-003">
@@ -86,6 +90,7 @@
             resultBox.innerText = 'セキュリティポリシー評価中...';
 
             const payload = {
+                api_key: document.getElementById('api_key').value,
                 agent_id: document.getElementById('agent_id').value,
                 action: document.getElementById('action').value,
                 amount: parseFloat(document.getElementById('amount').value)
