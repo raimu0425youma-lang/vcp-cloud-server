@@ -11,6 +11,12 @@ def index():
         return send_file("static/index.html")
     return send_file("index.html")
 
+@app.route("/popup.html")
+def popup():
+    if os.path.exists("static/popup.html"):
+        return send_file("static/popup.html")
+    return send_file("popup.html")
+
 @app.route("/api/health", methods=["GET"])
 def health_check():
     return jsonify({"status": "online", "system": "VCP Enterprise Core v3.0"})
@@ -19,11 +25,7 @@ def health_check():
 def ai_process():
     data = request.get_json() or {}
     prompt = data.get("prompt", "")
-    return jsonify({"status": "success", "result": f"Processed: {prompt}"})
-
-@app.route("/api/database/memo", methods=["POST"])
-def save_memo():
-    return jsonify({"status": "saved", "records": [{"title": "test", "detail": "test"}]})
+    return jsonify({"status": "success", "result": f"Processed via API: {prompt}"})
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
