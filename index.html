@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VCP Cloud App</title>
+    <style>
+        body { font-family: sans-serif; max-width: 500px; margin: 40px auto; padding: 20px; text-align: center; background: #f4f7f6; }
+        .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        input, button { width: 100%; padding: 12px; margin: 8px 0; box-sizing: border-box; border-radius: 6px; border: 1px solid #ccc; font-size: 16px; }
+        button { background: #007bff; color: white; font-weight: bold; border: none; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        #result { margin-top: 15px; font-weight: bold; color: #28a745; word-break: break-all; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h2>VCP クラウド連携テスト</h2>
+        <input type="text" id="nameInput" placeholder="名前を入力">
+        <input type="number" id="ageInput" placeholder="年齢を入力">
+        <button onclick="sendData()">サーバーへ送信</button>
+        <div id="result"></div>
+    </div>
+
+    <script>
+        async function sendData() {
+            const name = document.getElementById('nameInput').value || 'ゲスト';
+            const age = parseInt(document.getElementById('ageInput').value) || 20;
+            const resultDiv = document.getElementById('result');
+            
+            resultDiv.innerText = "送信中...";
+
+            try {
+                const res = await fetch('https://vcp-cloud-server.onrender.com/api/user', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: name, age: age })
+                });
+                const data = await res.json();
+                resultDiv.innerText = data.message;
+            } catch (err) {
+                resultDiv.innerText = "エラーが発生しました";
+            }
+        }
+    </script>
+</body>
+</html>
