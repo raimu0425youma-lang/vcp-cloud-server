@@ -1,0 +1,5 @@
+policy_id: "pol_aws_ec2_001"
+target_resource: "aws_ec2"
+max_budget_per_action: 50000
+allowed_actions:
+  - "create_ec2"

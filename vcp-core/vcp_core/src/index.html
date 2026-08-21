@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VCP CORE Gateway // Enterprise AI Security Console</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="bg-slate-950 text-slate-100 font-sans min-h-screen">
+    <!-- Header Navigation -->
+    <header class="border-b border-slate-800 bg-slate-900/80 backdrop-blur sticky top-0 z-40 px-6 py-3">
+        <div class="max-w-7xl mx-auto flex justify-between items-center">
+            <div class="flex items-center space-x-3">
+                <div class="bg-cyan-500/10 border border-cyan-500/30 p-2 rounded-lg text-cyan-400">
+                    <i class="fa-solid fa-shield-halved text-xl"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold tracking-wide text-slate-100">VCP CORE <span class="text-xs bg-cyan-950 border border-cyan-800 text-cyan-400 font-mono px-2 py-0.5 rounded ml-2">v0.1.0 Enterprise</span></h1>
+                    <p class="text-xs text-slate-400">Zero-Trust AI Action Security & Causality Gateway</p>
+                </div>
+            </div>
+            
+            <div class="flex items-center space-x-4">
+                <button onclick="openKeyModal()" class="flex items-center space-x-2 bg-slate-800 hover:bg-slate-700 text-xs px-3 py-2 rounded-lg border border-slate-700 text-cyan-300 transition">
+                    <i class="fa-solid fa-key text-yellow-400"></i>
+                    <span>自分のAPIキー設定 (BYOK)</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto p-6 space-y-6">
+        <!-- Stat Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div class="bg-slate-900 border border-slate-800 p-4 rounded-xl flex items-center space-x-4">
+                <div class="bg-blue-500/10 p-3 rounded-lg text-blue-400"><i class="fa-solid fa-gauge-high text-xl"></i></div>
+                <div>
+                    <p class="text-xs text-slate-400">総検証リクエスト</p>
+                    <p id="statTotal" class="text-2xl font-bold font-mono text-slate-100">0</p>
+                </div>
+            </div>
+            <div class="bg-slate-900 border border-slate-800 p-4 rounded-xl flex items-center space-x-4">
+                <div class="bg-emerald-500/10 p-3 rounded-lg text-emerald-400"><i class="fa-solid fa-circle-check text-xl"></i></div>
+                <div>
+                    <p class="text-xs text-slate-400">許可ステータス</p>
+                    <p id="statAllowed" class="text-2xl font-bold font-mono text-emerald-400">0</p>
+                </div>
+            </div>
+            <div class="bg-slate-900 border border-slate-800 p-4 rounded-xl flex items-center space-x-4">
+                <div class="bg-rose-500/10 p-3 rounded-lg text-rose-400"><i class="fa-solid fa-hand text-xl"></i></div>
+                <div>
+                    <p class="text-xs text-slate-400">遮断・保護数</p>
+                    <p id="statBlocked" class="text-2xl font-bold font-mono text-rose-400">0</p>
+                </div>
+            </div>
+            <div class="bg-slate-900 border border-slate-800 p-4 rounded-xl flex items-center space-x-4">
+                <div class="bg-amber-500/10 p-3 rounded-lg text-amber-400"><i class="fa-solid fa-piggy-bank text-xl"></i></div>
+                <div>
+                    <p class="text-xs text-slate-400">開発者コスト負担</p>
+                    <p class="text-2xl font-bold font-mono text-amber-400">¥0 <span class="text-xs text-slate-500 font-normal">(完全無料)</span></p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Workspace -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- Form Input -->
+            <div class="lg:col-span-1 bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-xl space-y-4">
+                <h2 class="text-md font-bold text-slate-200 border-b border-slate-800 pb-3 flex items-center space-x-2">
+                    <i class="fa-solid fa-terminal text-cyan-400"></i>
+                    <span>AI アクション模擬テスト</span>
+                </h2>
+                
+                <form id="actionForm" class="space-y-4">
+                    <div>
+                        <label class="block text-xs text-slate-400 mb-1">検証エンジン（AIモデル）</label>
+                        <select id="modelProvider" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-cyan-500">
+                            <option value="rule_engine">内蔵ルールエンジン (VCP Core / 完全無料)</option>
+                            <option value="openai">ChatGPT (GPT-4o mini) ※要ユーザーKey</option>
+                            <option value="anthropic">Claude (3.5 Sonnet) ※要ユーザーKey</option>
+                            <option value="gemini">Gemini (1.5 Flash) ※要ユーザーKey</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs text-slate-400 mb-1">ユーザーの目的 (Intent)</label>
+                        <input type="text" id="intent" value="10万円以内でサーバー構築" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-cyan-500">
+                    </div>
+
+                    <div>
+                        <label class="block text-xs text-slate-400 mb-1">実行予定のアクション (Proposed Action)</label>
+                        <input type="text" id="action" value="create_ec2" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-cyan-500">
+                    </div>
+
+                    <div>
+                        <label class="block text-xs text-slate-400 mb-1">概算見積コスト (円)</label>
+                        <input type="number" id="cost" value="30000" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-cyan-500">
+                    </div>
+
+                    <button type="submit" class="w-full bg-cyan-600 hover:bg-cyan-500 font-semibold text-white py-2.5 rounded-lg text-sm transition shadow-lg shadow-cyan-950/50 flex items-center justify-center space-x-2">
+                        <i class="fa-solid fa-shield-virus"></i>
+                        <span>安全検証を実行する</span>
+                    </button>
+                </form>
+            </div>
+
+            <!-- Audit Logs -->
+            <div class="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-xl flex flex-col">
+                <div class="flex justify-between items-center mb-4 border-b border-slate-800 pb-3">
+                    <h2 class="text-md font-bold text-slate-200 flex items-center space-x-2">
+                        <i class="fa-solid fa-list-check text-cyan-400"></i>
+                        <span>改ざん不可 証拠（Evidence）監査ログ</span>
+                    </h2>
+                    <div class="flex space-x-2">
+                        <button onclick="downloadJSON()" class="text-xs bg-slate-800 hover:bg-slate-700 border border-slate-700 px-3 py-1.5 rounded-lg text-slate-300">JSON出力</button>
+                        <button onclick="fetchLogs()" class="text-xs bg-cyan-950 hover:bg-cyan-900 border border-cyan-800 px-3 py-1.5 rounded-lg text-cyan-300">更新</button>
+                    </div>
+                </div>
+
+                <div class="overflow-x-auto flex-1">
+                    <table class="w-full text-left text-xs">
+                        <thead class="text-slate-400 border-b border-slate-800 bg-slate-950/50">
+                            <tr>
+                                <th class="p-2.5">ステータス</th>
+                                <th class="p-2.5">AIエンジン</th>
+                                <th class="p-2.5">アクション</th>
+                                <th class="p-2.5">判定理由</th>
+                                <th class="p-2.5">証拠Hash</th>
+                            </tr>
+                        </thead>
+                        <tbody id="logTable" class="divide-y divide-slate-800/60 text-slate-300"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- BYOK Key Modal -->
+    <div id="keyModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm hidden items-center justify-center z-50">
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-6 max-w-md w-full shadow-2xl space-y-4">
+            <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+                <h3 class="text-md font-bold text-slate-200 flex items-center space-x-2">
+                    <i class="fa-solid fa-key text-yellow-400"></i>
+                    <span>エンドユーザー用 APIキー設定</span>
+                </h3>
+                <button onclick="closeKeyModal()" class="text-slate-500 hover:text-slate-300"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            
+            <p class="text-xs text-slate-400 leading-relaxed">
+                ※アプリ開発者側の費用負担をゼロに保つため、本物のAIモデルを使用する場合はご自身のAPIキーを入力してください（キーは端末のブラウザ内のみに保存されます）。
+            </p>
+
+            <div class="space-y-3 text-xs">
+                <div>
+                    <label class="block text-slate-400 mb-1">OpenAI API Key (ChatGPT)</label>
+                    <input type="password" id="userOpenAIKey" placeholder="sk-proj-..." class="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-slate-200">
+                </div>
+                <div>
+                    <label class="block text-slate-400 mb-1">Anthropic API Key (Claude)</label>
+                    <input type="password" id="userClaudeKey" placeholder="sk-ant-..." class="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-slate-200">
+                </div>
+                <div>
+                    <label class="block text-slate-400 mb-1">Google Gemini API Key</label>
+                    <input type="password" id="userGeminiKey" placeholder="AIzaSy..." class="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-slate-200">
+                </div>
+            </div>
+
+            <div class="pt-2 flex justify-end space-x-2">
+                <button onclick="closeKeyModal()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-xs rounded text-slate-300">キャンセル</button>
+                <button onclick="saveKeys()" class="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-xs rounded text-white font-semibold">設定を保存</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function openKeyModal() {
+            document.getElementById('userOpenAIKey').value = localStorage.getItem('vcp_openai_key') || '';
+            document.getElementById('userClaudeKey').value = localStorage.getItem('vcp_claude_key') || '';
+            document.getElementById('userGeminiKey').value = localStorage.getItem('vcp_gemini_key') || '';
+            document.getElementById('keyModal').classList.remove('hidden');
+            document.getElementById('keyModal').classList.add('flex');
+        }
+
+        function closeKeyModal() {
+            document.getElementById('keyModal').classList.add('hidden');
+            document.getElementById('keyModal').classList.remove('flex');
+        }
+
+        function saveKeys() {
+            localStorage.setItem('vcp_openai_key', document.getElementById('userOpenAIKey').value);
+            localStorage.setItem('vcp_claude_key', document.getElementById('userClaudeKey').value);
+            localStorage.setItem('vcp_gemini_key', document.getElementById('userGeminiKey').value);
+            closeKeyModal();
+            alert('APIキーをブラウザに保存しました！');
+        }
+
+        async function fetchLogs() {
+            const res = await fetch('/v1/evidence/logs');
+            const data = await res.json();
+            const table = document.getElementById('logTable');
+            table.innerHTML = '';
+            
+            let total = data.logs.length;
+            let allowed = 0;
+            let blocked = 0;
+
+            data.logs.slice().reverse().forEach(item => {
+                const ev = item.evidence;
+                const isAllowed = ev.status === '許可';
+                if (isAllowed) allowed++; else blocked++;
+
+                const statusBg = isAllowed ? 'bg-emerald-950/70 border-emerald-800 text-emerald-400' : 'bg-rose-950/70 border-rose-800 text-rose-400';
+                
+                const row = `
+                    <tr class="hover:bg-slate-800/30 transition">
+                        <td class="p-2.5"><span class="px-2 py-0.5 border rounded text-[10px] font-mono font-bold ${statusBg}">${ev.status}</span></td>
+                        <td class="p-2.5 font-medium text-slate-300">${ev.provider_used || 'VCP Engine'}</td>
+                        <td class="p-2.5 font-mono text-cyan-400">${ev.action_type}</td>
+                        <td class="p-2.5 text-slate-300">${ev.reason}</td>
+                        <td class="p-2.5 font-mono text-slate-500 truncate max-w-[100px]">${ev.evidence_hash}</td>
+                    </tr>
+                `;
+                table.innerHTML += row;
+            });
+
+            document.getElementById('statTotal').innerText = total;
+            document.getElementById('statAllowed').innerText = allowed;
+            document.getElementById('statBlocked').innerText = blocked;
+        }
+
+        document.getElementById('actionForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const payload = {
+                model_provider: document.getElementById('modelProvider').value,
+                user_intent: document.getElementById('intent').value,
+                proposed_action: document.getElementById('action').value,
+                estimated_cost_jpy: parseFloat(document.getElementById('cost').value),
+                user_api_keys: {
+                    openai_key: localStorage.getItem('vcp_openai_key') || null,
+                    anthropic_key: localStorage.getItem('vcp_claude_key') || null,
+                    gemini_key: localStorage.getItem('vcp_gemini_key') || null
+                }
+            };
+
+            await fetch('/v1/execution/control', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(payload)
+            });
+            fetchLogs();
+        });
+
+        async function downloadJSON() {
+            const res = await fetch('/v1/evidence/logs');
+            const data = await res.json();
+            const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `vcp_evidence_logs_${Date.now()}.json`;
+            a.click();
+        }
+
+        fetchLogs();
+    </script>
+</body>
+</html>

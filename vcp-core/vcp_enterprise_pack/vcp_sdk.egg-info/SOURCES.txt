@@ -1,0 +1,9 @@
+pyproject.toml
+vcp/__init__.py
+vcp/sdk.py
+vcp/integrations/langchain.py
+vcp_sdk.egg-info/PKG-INFO
+vcp_sdk.egg-info/SOURCES.txt
+vcp_sdk.egg-info/dependency_links.txt
+vcp_sdk.egg-info/requires.txt
+vcp_sdk.egg-info/top_level.txt

@@ -1,0 +1,12 @@
+{
+  "manifest_version": 3,
+  "name": "AEG Smart Auto-Router",
+  "version": "1.0",
+  "description": "AIの自動障害回避 ＆ コスト最適化プロキシ",
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "host_permissions": [
+    "http://localhost:8000/*"
+  ]
+}

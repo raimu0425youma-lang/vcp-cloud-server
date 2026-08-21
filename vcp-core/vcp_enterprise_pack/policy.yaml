@@ -1,0 +1,4 @@
+policy_id: "pol_global_001"
+target_resource: "aws_ec2"
+max_budget_per_action: 100000
+allowed_actions: ["create_instance"]
