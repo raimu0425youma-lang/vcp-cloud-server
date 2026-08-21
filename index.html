@@ -2,55 +2,131 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>VCP エンタープライズ制御センター</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VCP Enterprise Control Center | Final Grid</title>
     <style>
-        :root { --bg-color: #0b0f19; --card-bg: #111827; --accent: #3b82f6; --text: #f3f4f6; }
-        body { background-color: var(--bg-color); color: var(--text); padding: 2rem; font-family: sans-serif; }
-        .card { background: var(--card-bg); padding: 2rem; border-radius: 1rem; border: 1px solid #374151; }
-        h1 { margin-bottom: 1.5rem; font-size: 1.5rem; }
+        :root {
+            --bg-color: #0b0f19;
+            --card-bg: #111827;
+            --border-color: #1f2937;
+            --accent: #3b82f6;
+            --text-main: #f3f4f6;
+            --text-muted: #9ca3af;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        body { background-color: var(--bg-color); color: var(--text-main); padding: 2rem; min-height: 100vh; }
+        header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; border-bottom: 1px solid var(--border-color); padding-bottom: 1rem; }
+        h1 { font-size: 1.4rem; font-weight: 700; letter-spacing: 0.05em; }
+        .status-badge { font-size: 0.75rem; background: rgba(16, 185, 129, 0.1); color: var(--success); border: 1px solid var(--success); padding: 0.25rem 0.75rem; border-radius: 9999px; font-weight: 600; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 1.5rem; }
+        .card { background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 1rem; padding: 1.5rem; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
+        .card h2 { font-size: 1.1rem; margin-bottom: 1rem; color: var(--text-main); border-left: 3px solid var(--accent); padding-left: 0.5rem; }
         .form-group { margin-bottom: 1rem; }
-        label { display: block; margin-bottom: 0.5rem; color: #9ca3af; }
-        input, select { width: 100%; padding: 0.5rem; background: #030712; border: 1px solid #374151; color: white; }
-        button { width: 100%; padding: 0.75rem; background: var(--accent); color: white; border: none; cursor: pointer; margin-top: 1rem; }
-        #vcpResult { margin-top: 1rem; padding: 1rem; background: #000; border: 1px solid #4b5563; }
+        label { display: block; font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.3rem; }
+        input, select { width: 100%; padding: 0.75rem; background: #030712; border: 1px solid var(--border-color); color: white; border-radius: 0.5rem; font-size: 0.95rem; }
+        input:focus, select:focus { outline: none; border-color: var(--accent); }
+        button { width: 100%; background: var(--accent); color: white; border: none; padding: 0.75rem; border-radius: 0.5rem; font-weight: 600; cursor: pointer; transition: background 0.2s; margin-top: 0.5rem; }
+        button:hover { background: #1d4ed8; }
+        button.secondary { background: #374151; }
+        button.secondary:hover { background: #4b5563; }
+        .result-box { margin-top: 1rem; background: #030712; border: 1px solid var(--border-color); border-radius: 0.5rem; padding: 1rem; font-family: monospace; font-size: 0.8rem; min-height: 120px; max-height: 250px; overflow-y: auto; color: var(--text-muted); word-break: break-all; white-space: pre-wrap; }
+        .allowed { color: var(--success); border-color: var(--success); }
+        .human { color: var(--warning); border-color: var(--warning); }
+        .blocked { color: var(--danger); border-color: var(--danger); }
     </style>
 </head>
 <body>
-    <div class="card">
-        <h1>VCP エンタープライズ制御センター</h1>
-        <div class="form-group">
-            <label>エージェントID</label>
-            <input type="text" id="agent_id" value="agent-001">
+    <header>
+        <h1>VCP ENTERPRISE CONTROL CENTER</h1>
+        <div class="status-badge">SECURE GRID ONLINE</div>
+    </header>
+
+    <div class="grid">
+        <div class="card">
+            <h2>セキュリティ・ゲート評価テスト</h2>
+            <form id="vcpForm">
+                <div class="form-group">
+                    <label>エージェントID</label>
+                    <input type="text" id="agent_id" value="agent-003">
+                </div>
+                <div class="form-group">
+                    <label>実行アクション</label>
+                    <select id="action">
+                        <option value="transfer">transfer</option>
+                        <option value="read">read</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>金額 / リスク値</label>
+                    <input type="number" id="amount" value="5000">
+                </div>
+                <button type="submit">VCPコアへディスパッチ</button>
+            </form>
+            <div id="vcpResult" class="result-box">評価データ待機中</div>
         </div>
-        <div class="form-group">
-            <label>実行アクション</label>
-            <select id="action">
-                <option value="transfer">送金 (Financial)</option>
-                <option value="read">データ読み取り (Read)</option>
-                <option value="delete_files">ファイル削除 (High Risk)</option>
-            </select>
+
+        <div class="card">
+            <h2>フォレンジック監査</h2>
+            <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 1rem;">
+                蓄積されたすべての証跡ログのハッシュ連鎖を検証します。
+            </p>
+            <button class="secondary" onclick="verifyChain()">監査チェーンの整合性を検証する</button>
+            <div id="auditResult" class="result-box" style="margin-top: 1.5rem;">検証レポート未実行</div>
         </div>
-        <div class="form-group">
-            <label>金額 / リスク値</label>
-            <input type="number" id="amount" value="500">
-        </div>
-        <button onclick="dispatch()">VCPコアへ送信</button>
-        <div id="vcpResult">判定待ち...</div>
     </div>
+
     <script>
-        async function dispatch() {
+        document.getElementById('vcpForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const resultBox = document.getElementById('vcpResult');
+            resultBox.className = 'result-box';
+            resultBox.innerText = 'セキュリティポリシー評価中...';
+
             const payload = {
                 agent_id: document.getElementById('agent_id').value,
                 action: document.getElementById('action').value,
                 amount: parseFloat(document.getElementById('amount').value)
             };
-            const res = await fetch('/vcp/gate', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-            const data = await res.json();
-            document.getElementById('vcpResult').innerText = JSON.stringify(data, null, 2);
+
+            try {
+                const response = await fetch('/vcp/gate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await response.json();
+                resultBox.innerText = JSON.stringify(data, null, 2);
+
+                if (data.status === 'ALLOWED') resultBox.classList.add('allowed');
+                else if (data.status === 'HUMAN_APPROVAL') resultBox.classList.add('human');
+                else resultBox.classList.add('blocked');
+            } catch (err) {
+                resultBox.innerText = '接続エラー: ' + err.message;
+                resultBox.classList.add('blocked');
+            }
+        });
+
+        async function verifyChain() {
+            const auditBox = document.getElementById('auditResult');
+            auditBox.className = 'result-box';
+            auditBox.innerText = '全ブロックのハッシュ連鎖を検証中...';
+
+            try {
+                const response = await fetch('/vcp/audit/verify');
+                const data = await response.json();
+                auditBox.innerText = JSON.stringify(data, null, 2);
+                if (data.chain_status === 'SECURE_AND_VERIFIED') {
+                    auditBox.classList.add('allowed');
+                } else {
+                    auditBox.classList.add('blocked');
+                }
+            } catch (err) {
+                auditBox.innerText = '検証エラー: ' + err.message;
+                auditBox.classList.add('blocked');
+            }
         }
     </script>
 </body>
