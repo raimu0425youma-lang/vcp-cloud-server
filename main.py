@@ -4,7 +4,8 @@ import uuid
 import datetime
 import json
 import logging
-import requests
+import urllib.request
+import urllib.error
 from enum import Enum
 from dataclasses import dataclass, field, asdict
 from typing import Dict, List, Any, Optional
@@ -39,7 +40,7 @@ class EvidencePackage:
     verification_method: str
 
 # ==========================================
-# 2. VCP KERNEL (Real LLM Intent Verification via User API Key)
+# 2. VCP KERNEL (Standard Library HTTP / BYOK)
 # ==========================================
 
 class VCPKernel:
@@ -53,18 +54,16 @@ class VCPKernel:
 
     def verify_intent_with_llm(self, intent: str, action: str, api_key: str) -> bool:
         """
-        ユーザーから提供されたAPIキーを使い、本物のOpenAI APIに問い合わせて
-        AIの「意図（Intent）」と「実際の操作（Action）」に矛盾がないかを判定する。
-        （APIキーがない、またはエラーの場合はフォールバックとして簡易判定）
+        Python標準の urllib を使用し、追加パッケージなしでOpenAI APIを叩く。
+        Render環境でのエラー（Status 1）を完全に回避する設計。
         """
-        if not api_key or api_key.startswith("sk-placeholder"):
-            # キーがない場合のフォールバック（簡易ルール）
+        if not api_key or api_key.startswith("sk-placeholder") or len(api_key.strip()) < 10:
             if "delete" in action and "delete" not in intent and "remove" not in intent:
                 return False
             return True
 
         try:
-            # 本物のOpenAI API (GPT-4o-mini等) を呼び出してセマンティックチェック
+            url = "https://api.openai.com/v1/chat/completions"
             headers = {
                 "Authorization": f"Bearer {api_key.strip()}",
                 "Content-Type": "application/json"
@@ -75,21 +74,27 @@ class VCPKernel:
             Action: "{action}"
             Answer strictly with JSON: {{"safe": true}} or {{"safe": false}}
             """
-            payload = {
+            data = {
                 "model": "gpt-4o-mini",
                 "messages": [{"role": "user", "content": prompt}],
                 "temperature": 0.0,
                 "response_format": {"type": "json_object"}
             }
             
-            response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload, timeout=5)
-            if response.status_code == 200:
-                result_data = response.json()
-                content = json.loads(result_data["choices"][0]["message"]["content"])
-                return content.get("safe", True)
-            else:
-                self.logger.warning(f"OpenAI API error: {response.text}")
-                return True # APIエラー時はブロックせず通すか安全側に倒す
+            req = urllib.request.Request(
+                url, 
+                data=json.dumps(data).encode('utf-8'), 
+                headers=headers, 
+                method='POST'
+            )
+            
+            with urllib.request.urlopen(req, timeout=5) as response:
+                if response.status == 200:
+                    res_body = response.read().decode('utf-8')
+                    result_data = json.loads(res_body)
+                    content = json.loads(result_data["choices"][0]["message"]["content"])
+                    return content.get("safe", True)
+            return True
         except Exception as e:
             self.logger.error(f"LLM verification failed: {str(e)}")
             return True
@@ -103,11 +108,9 @@ class VCPKernel:
 
             target_action = payload.get("action", "")
             
-            # 権限チェック
             if target_action == "delete_files" and agent_id == "agent-sub-002":
                 raise PermissionError("AUTHORITY_REJECTED: Sub-agent cannot delete files")
 
-            # Layer 3: 本物のLLM意図検証 (ユーザーのAPIキーを使用)
             intent = payload.get("intent", "").lower()
             is_intent_safe = self.verify_intent_with_llm(intent, target_action, api_key)
             
@@ -179,9 +182,7 @@ def aec_gateway():
     if not data:
         return jsonify({"status": "ERROR", "reason": "Invalid JSON"}), 400
     
-    # ヘッダーまたはボディからユーザーのAPIキーを受け取る
     api_key = request.headers.get("X-API-Key", "") or data.get("api_key", "")
-    
     result = vcp_kernel.process_action(data, api_key)
     status_code = 200 if result["status"] == "SUCCESS" else 403
     return jsonify(result), status_code
@@ -203,7 +204,7 @@ def get_metrics():
     })
 
 # ==========================================
-# 5. FRONTEND: VCP CONTROL CENTER (With API Key Input)
+# 5. FRONTEND: VCP CONTROL CENTER
 # ==========================================
 
 @app.route("/")
@@ -378,7 +379,6 @@ def index():
                 gap: 5px;
             }
             .layer-box {
-                background-color: var(--bg-tertiator);
                 background-color: var(--bg-tertiary);
                 border: 1px solid var(--accent-blue);
                 padding: 8px 12px;
@@ -437,7 +437,6 @@ def index():
             <div class="topbar">
                 <div style="font-size: 1.2rem;" id="topbar-title">制御プレーン / BYOKモード</div>
                 <div class="topbar-right">
-                    <!-- ユーザーが自分のAPIキーを入れる欄（サーバー代0円の秘訣） -->
                     <input type="password" id="apiKeyInput" class="api-key-input" placeholder="OpenAI API Key (sk-...)" onchange="saveApiKey()">
                     <select class="lang-select" id="langSelect" onchange="changeLanguage()">
                         <option value="ja">日本語</option>
@@ -470,7 +469,7 @@ def index():
                     <div style="font-weight: bold;" id="lbl-test-panel">AI意図検証テスト (LLM連携):</div>
                     <button class="btn" onclick="sendTestAction('allowed')" id="btn-allowed">安全なアクションを送信</button>
                     <button class="btn" onclick="sendTestAction('blocked')" style="background-color: var(--status-blocked); color: white;" id="btn-blocked">矛盾した危険な意図を送信</button>
-                    <span style="font-size: 0.8rem; color: var(--text-muted);" id="lbl-key-notice">※APIキーを入力すると、本物のGPT-4o-miniが意味論を解析します。未入力でもフォールバック動作します。</span>
+                    <span style="font-size: 0.8rem; color: var(--text-muted);" id="lbl-key-notice">※APIキーを入力すると、本物のGPT-4o-miniが意味論を解析します。</span>
                 </div>
 
                 <div class="layer-section">
@@ -510,7 +509,6 @@ def index():
         <script>
             let currentLang = 'ja';
 
-            // ページ読み込み時にローカルストレージからAPIキーを復元
             window.onload = function() {
                 const savedKey = localStorage.getItem('vcp_user_openai_key');
                 if (savedKey) {
@@ -596,12 +594,12 @@ def index():
                             
                             const tr = document.createElement('tr');
                             tr.innerHTML = `
-                                ` + `<td>${date}</td>` +
-                                `<td style="font-family: monospace; color: var(--text-muted);">${log.evidence_id}</td>` +
-                                `<td>${log.agent_id}</td>` +
-                                `<td>${log.action_type}</td>` +
-                                `<td>${methodBadge}</td>` +
-                                `<td>${statusBadge}</td>`;
+                                <td>${date}</td>
+                                <td style="font-family: monospace; color: var(--text-muted);">${log.evidence_id}</td>
+                                <td>${log.agent_id}</td>
+                                <td>${log.action_type}</td>
+                                <td>${methodBadge}</td>
+                                <td>${statusBadge}</td>`;
                             tbody.appendChild(tr);
                         });
                     }
@@ -622,11 +620,10 @@ def index():
                         parameters: {amount: 5000} 
                     };
                 } else {
-                    // 意図と言葉が矛盾している（AIの嘘を見抜くテスト）
                     testAction = { 
                         agent_id: "agent-mai-001", 
-                        intent: "I want to greet the user politely and say hello.", // 嘘の意図
-                        action: "delete_files" // 実際の危険なアクション
+                        intent: "I want to greet the user politely and say hello.", 
+                        action: "delete_files" 
                     };
                 }
                 
