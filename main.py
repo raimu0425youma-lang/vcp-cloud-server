@@ -19,6 +19,19 @@ def get_db_connection():
         conn.row_factory = sqlite3.Row
         return conn
 
+def execute_query(cursor, query, params=()):
+    if DATABASE_URL:
+        query = query.replace('?', '%s')
+    cursor.execute(query, params)
+
+def fetchall_query(cursor, query, params=()):
+    execute_query(cursor, query, params)
+    return cursor.fetchall()
+
+def fetchone_query(cursor, query, params=()):
+    execute_query(cursor, query, params)
+    return cursor.fetchone()
+
 def init_vcp_db():
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -60,31 +73,45 @@ def init_vcp_db():
         cursor.execute('''CREATE TABLE IF NOT EXISTS api_keys 
                           (api_key TEXT PRIMARY KEY, owner TEXT, active INTEGER)''')
 
-    # 初期データ構築
+    # エージェント・権限・ポリシーの事前登録（決算処理にも対応）
+    agents = ['root', 'agent-001', 'agent-002', 'agent-003', 'agent-finance']
+    for a in agents:
+        if DATABASE_URL:
+            execute_query(cursor, "INSERT INTO agents (agent_id) VALUES (?) ON CONFLICT (agent_id) DO NOTHING", (a,))
+        else:
+            execute_query(cursor, "INSERT OR IGNORE INTO agents VALUES (?)", (a,))
+
+    delegations = [
+        ('root', 'agent-001', 'transfer', 1),
+        ('agent-001', 'agent-002', 'transfer', 1),
+        ('agent-002', 'agent-003', 'transfer', 1),
+        ('root', 'agent-001', 'financial_settlement', 1),
+        ('agent-001', 'agent-finance', 'financial_settlement', 1),
+        ('root', 'agent-001', 'read', 1),
+        ('agent-001', 'agent-002', 'read', 1),
+        ('agent-002', 'agent-003', 'read', 1),
+    ]
+    for g_or, g_ee, perm, act in delegations:
+        if DATABASE_URL:
+            execute_query(cursor, "INSERT INTO delegations (grantor, grantee, permission, active) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING", (g_or, g_ee, perm, act))
+        else:
+            execute_query(cursor, "INSERT OR IGNORE INTO delegations (grantor, grantee, permission, active) VALUES (?, ?, ?, ?)", (g_or, g_ee, perm, act))
+
+    policies = [
+        ('transfer', 1000.0, 10000.0),
+        ('financial_settlement', 500000.0, 5000000.0), # 決算用: 50万まで自動、500万まで人間承認
+        ('read', 0.0, 0.0)
+    ]
+    for perm, max_a, thresh in policies:
+        if DATABASE_URL:
+            execute_query(cursor, "INSERT INTO policies (permission, max_amount, approval_threshold) VALUES (?, ?, ?) ON CONFLICT (permission) DO NOTHING", (perm, max_a, thresh))
+        else:
+            execute_query(cursor, "INSERT OR IGNORE INTO policies VALUES (?, ?, ?)", (perm, max_a, thresh))
+
     if DATABASE_URL:
-        cursor.execute("INSERT INTO agents (agent_id) VALUES ('root') ON CONFLICT (agent_id) DO NOTHING")
-        cursor.execute("INSERT INTO agents (agent_id) VALUES ('agent-001') ON CONFLICT (agent_id) DO NOTHING")
-        cursor.execute("INSERT INTO agents (agent_id) VALUES ('agent-002') ON CONFLICT (agent_id) DO NOTHING")
-        cursor.execute("INSERT INTO agents (agent_id) VALUES ('agent-003') ON CONFLICT (agent_id) DO NOTHING")
-        
-        cursor.execute("INSERT INTO delegations (grantor, grantee, permission, active) VALUES ('root', 'agent-001', 'transfer', 1) ON CONFLICT DO NOTHING")
-        cursor.execute("INSERT INTO delegations (grantor, grantee, permission, active) VALUES ('agent-001', 'agent-002', 'transfer', 1) ON CONFLICT DO NOTHING")
-        cursor.execute("INSERT INTO delegations (grantor, grantee, permission, active) VALUES ('agent-002', 'agent-003', 'transfer', 1) ON CONFLICT DO NOTHING")
-
-        cursor.execute("INSERT INTO policies (permission, max_amount, approval_threshold) VALUES ('transfer', 1000.0, 10000.0) ON CONFLICT (permission) DO NOTHING")
-        cursor.execute("INSERT INTO api_keys (api_key, owner, active) VALUES ('vcp_live_secret_key_001', 'system_admin', 1) ON CONFLICT (api_key) DO NOTHING")
+        execute_query(cursor, "INSERT INTO api_keys (api_key, owner, active) VALUES ('vcp_live_secret_key_001', 'system_admin', 1) ON CONFLICT DO NOTHING")
     else:
-        cursor.execute("INSERT OR IGNORE INTO agents VALUES ('root')")
-        cursor.execute("INSERT OR IGNORE INTO agents VALUES ('agent-001')")
-        cursor.execute("INSERT OR IGNORE INTO agents VALUES ('agent-002')")
-        cursor.execute("INSERT OR IGNORE INTO agents VALUES ('agent-003')")
-        
-        cursor.execute("INSERT OR IGNORE INTO delegations (grantor, grantee, permission, active) VALUES ('root', 'agent-001', 'transfer', 1)")
-        cursor.execute("INSERT OR IGNORE INTO delegations (grantor, grantee, permission, active) VALUES ('agent-001', 'agent-002', 'transfer', 1)")
-        cursor.execute("INSERT OR IGNORE INTO delegations (grantor, grantee, permission, active) VALUES ('agent-002', 'agent-003', 'transfer', 1)")
-
-        cursor.execute("INSERT OR IGNORE INTO policies VALUES ('transfer', 1000.0, 10000.0)")
-        cursor.execute("INSERT OR IGNORE INTO api_keys VALUES ('vcp_live_secret_key_001', 'system_admin', 1)")
+        execute_query(cursor, "INSERT OR IGNORE INTO api_keys VALUES ('vcp_live_secret_key_001', 'system_admin', 1)")
 
     conn.commit()
     cursor.close()
@@ -105,8 +132,7 @@ def trace_authority_graph(grantee, permission, visited=None):
 
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT grantor FROM delegations WHERE grantee = ? AND permission = ? AND active = 1", (grantee, permission))
-    rows = cursor.fetchall()
+    rows = fetchall_query(cursor, "SELECT grantor FROM delegations WHERE grantee = ? AND permission = ? AND active = 1", (grantee, permission))
     cursor.close()
     conn.close()
 
@@ -116,7 +142,7 @@ def trace_authority_graph(grantee, permission, visited=None):
         if grantor == 'root':
             paths.append(['root', grantee])
         else:
-            sub_paths = trace_authority_graph(grantor, permission, visited)
+            sub_paths = trace_authority_graph(grantor, permission, visited.copy())
             for p in sub_paths:
                 paths.append(p + [grantee])
     return paths
@@ -124,18 +150,14 @@ def trace_authority_graph(grantee, permission, visited=None):
 def record_evidence(grantee, action, amount, status, reason):
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT current_hash FROM evidence_chain ORDER BY id DESC LIMIT 1")
-    last_row = cursor.fetchone()
-    cursor.close()
+    last_row = fetchone_query(cursor, "SELECT current_hash FROM evidence_chain ORDER BY id DESC LIMIT 1")
     
     prev_hash = last_row[0] if last_row else "0" * 64
-
     timestamp = datetime.datetime.utcnow().isoformat()
     raw_data = f"{timestamp}|{grantee}|{action}|{amount}|{status}|{reason}|{prev_hash}"
     current_hash = hashlib.sha256(raw_data.encode('utf-8')).hexdigest()
 
-    cursor = conn.cursor()
-    cursor.execute("""
+    execute_query(cursor, """
         INSERT INTO evidence_chain (timestamp, grantee, action, amount, status, reason, prev_hash, current_hash)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     """, (timestamp, grantee, action, amount, status, reason, prev_hash, current_hash))
@@ -154,8 +176,7 @@ def gate():
     client_api_key = data.get("api_key")
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT active FROM api_keys WHERE api_key = ?", (client_api_key,))
-    key_row = cursor.fetchone()
+    key_row = fetchone_query(cursor, "SELECT active FROM api_keys WHERE api_key = ?", (client_api_key,))
     cursor.close()
     conn.close()
 
@@ -173,14 +194,17 @@ def gate():
 
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT max_amount, approval_threshold FROM policies WHERE permission = ?", (action,))
-    policy = cursor.fetchone()
+    policy = fetchone_query(cursor, "SELECT max_amount, approval_threshold FROM policies WHERE permission = ?", (action,))
     cursor.close()
     conn.close()
 
     if policy:
         max_amt = policy[0]
         approval_thresh = policy[1]
+
+        if action == 'read':
+            h = record_evidence(grantee, action, amount, "ALLOWED", "READ_ACCESS_GRANTED")
+            return jsonify({"status": "ALLOWED", "reason": "READ_ACCESS_GRANTED", "verified_chain": valid_paths, "evidence_hash": h})
 
         if amount > approval_thresh:
             h = record_evidence(grantee, action, amount, "BLOCKED", "POLICY_VIOLATION_CRITICAL_LIMIT")
@@ -196,8 +220,7 @@ def gate():
 def verify_audit_chain():
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT id, timestamp, grantee, action, amount, status, reason, prev_hash, current_hash FROM evidence_chain ORDER BY id ASC")
-    rows = cursor.fetchall()
+    rows = fetchall_query(cursor, "SELECT id, timestamp, grantee, action, amount, status, reason, prev_hash, current_hash FROM evidence_chain ORDER BY id ASC")
     cursor.close()
     conn.close()
 
@@ -228,6 +251,38 @@ def verify_audit_chain():
         "total_records": len(rows),
         "audit_trail": audit_report
     })
+
+@app.route("/vcp/audit/reset", methods=["POST"])
+def reset_audit_chain():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    execute_query(cursor, "DELETE FROM evidence_chain")
+    conn.commit()
+    cursor.close()
+    conn.close()
+    return jsonify({"status": "SUCCESS", "message": "監査ログを初期化しました"})
+
+@app.route("/vcp/audit/logs", methods=["GET"])
+def get_recent_logs():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    rows = fetchall_query(cursor, "SELECT id, timestamp, grantee, action, amount, status, reason, current_hash FROM evidence_chain ORDER BY id DESC LIMIT 10")
+    cursor.close()
+    conn.close()
+
+    logs = []
+    for r in rows:
+        logs.append({
+            "id": r[0],
+            "timestamp": r[1],
+            "grantee": r[2],
+            "action": r[3],
+            "amount": r[4],
+            "status": r[5],
+            "reason": r[6],
+            "hash": r[7]
+        })
+    return jsonify({"logs": logs})
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
