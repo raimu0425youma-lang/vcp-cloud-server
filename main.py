@@ -4,6 +4,7 @@ import uuid
 import datetime
 import json
 import logging
+import requests
 from enum import Enum
 from dataclasses import dataclass, field, asdict
 from typing import Dict, List, Any, Optional
@@ -35,9 +36,10 @@ class EvidencePackage:
     status: str
     recovery_mode: str
     intent_hash: str
+    verification_method: str
 
 # ==========================================
-# 2. VCP KERNEL (8-Layer Enforcement Engine)
+# 2. VCP KERNEL (Real LLM Intent Verification via User API Key)
 # ==========================================
 
 class VCPKernel:
@@ -49,7 +51,50 @@ class VCPKernel:
         }
         self.logger = logging.getLogger("VCP_KERNEL")
 
-    def process_action(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+    def verify_intent_with_llm(self, intent: str, action: str, api_key: str) -> bool:
+        """
+        ユーザーから提供されたAPIキーを使い、本物のOpenAI APIに問い合わせて
+        AIの「意図（Intent）」と「実際の操作（Action）」に矛盾がないかを判定する。
+        （APIキーがない、またはエラーの場合はフォールバックとして簡易判定）
+        """
+        if not api_key or api_key.startswith("sk-placeholder"):
+            # キーがない場合のフォールバック（簡易ルール）
+            if "delete" in action and "delete" not in intent and "remove" not in intent:
+                return False
+            return True
+
+        try:
+            # 本物のOpenAI API (GPT-4o-mini等) を呼び出してセマンティックチェック
+            headers = {
+                "Authorization": f"Bearer {api_key.strip()}",
+                "Content-Type": "application/json"
+            }
+            prompt = f"""
+            You are a security AI. Check if the user's stated Intent safely matches the Action payload.
+            Intent: "{intent}"
+            Action: "{action}"
+            Answer strictly with JSON: {{"safe": true}} or {{"safe": false}}
+            """
+            payload = {
+                "model": "gpt-4o-mini",
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0.0,
+                "response_format": {"type": "json_object"}
+            }
+            
+            response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload, timeout=5)
+            if response.status_code == 200:
+                result_data = response.json()
+                content = json.loads(result_data["choices"][0]["message"]["content"])
+                return content.get("safe", True)
+            else:
+                self.logger.warning(f"OpenAI API error: {response.text}")
+                return True # APIエラー時はブロックせず通すか安全側に倒す
+        except Exception as e:
+            self.logger.error(f"LLM verification failed: {str(e)}")
+            return True
+
+    def process_action(self, payload: Dict[str, Any], api_key: str) -> Dict[str, Any]:
         try:
             agent_id = payload.get("agent_id")
             if not agent_id or agent_id not in self.active_agents:
@@ -58,13 +103,18 @@ class VCPKernel:
 
             target_action = payload.get("action", "")
             
-            # 権限チェックの緩和（デモをしやすくするため）
+            # 権限チェック
             if target_action == "delete_files" and agent_id == "agent-sub-002":
                 raise PermissionError("AUTHORITY_REJECTED: Sub-agent cannot delete files")
 
+            # Layer 3: 本物のLLM意図検証 (ユーザーのAPIキーを使用)
             intent = payload.get("intent", "").lower()
-            if "delete" in target_action and "delete" not in intent and "remove" not in intent:
-                raise ValueError("INTENT_MISMATCH: Action payload contradicts stated intent.")
+            is_intent_safe = self.verify_intent_with_llm(intent, target_action, api_key)
+            
+            v_method = "LLM_SEMANTIC_CHECK (BYOK)" if api_key and not api_key.startswith("sk-placeholder") else "RULE_FALLBACK"
+
+            if not is_intent_safe:
+                raise ValueError("INTENT_MISMATCH: AI Semantic Guard detected intent deception.")
 
             amount = payload.get("parameters", {}).get("amount", 0)
             if target_action == "payment_execute" and amount > 500000:
@@ -85,7 +135,8 @@ class VCPKernel:
                 action_type=target_action,
                 status="ALLOWED",
                 recovery_mode=recovery_mode,
-                intent_hash=f"sha256:{hash(intent)}"
+                intent_hash=f"sha256:{hash(intent)}",
+                verification_method=v_method
             )
             self.evidence_ledger.insert(0, evidence)
             if len(self.evidence_ledger) > 100: self.evidence_ledger.pop()
@@ -94,7 +145,8 @@ class VCPKernel:
                 "status": "SUCCESS",
                 "execution_id": execution_id,
                 "evidence_id": evidence.evidence_id,
-                "recovery_contract": recovery_mode
+                "recovery_contract": recovery_mode,
+                "verification": v_method
             }
 
         except Exception as e:
@@ -105,7 +157,8 @@ class VCPKernel:
                 action_type=payload.get("action", "unknown"),
                 status="BLOCKED",
                 recovery_mode="N/A",
-                intent_hash="N/A"
+                intent_hash="N/A",
+                verification_method="ERROR_BLOCK"
             ))
             return {"status": "BLOCKED", "reason": str(e)}
 
@@ -125,7 +178,11 @@ def aec_gateway():
     data = request.get_json()
     if not data:
         return jsonify({"status": "ERROR", "reason": "Invalid JSON"}), 400
-    result = vcp_kernel.process_action(data)
+    
+    # ヘッダーまたはボディからユーザーのAPIキーを受け取る
+    api_key = request.headers.get("X-API-Key", "") or data.get("api_key", "")
+    
+    result = vcp_kernel.process_action(data, api_key)
     status_code = 200 if result["status"] == "SUCCESS" else 403
     return jsonify(result), status_code
 
@@ -146,7 +203,7 @@ def get_metrics():
     })
 
 # ==========================================
-# 5. FRONTEND: VCP CONTROL CENTER (Multi-lang & Manual)
+# 5. FRONTEND: VCP CONTROL CENTER (With API Key Input)
 # ==========================================
 
 @app.route("/")
@@ -157,7 +214,7 @@ def index():
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>VCP Enterprise Control Center</title>
+        <title>VCP Enterprise Control Center (BYOK)</title>
         <style>
             :root {
                 --bg-primary: #020617;
@@ -234,6 +291,15 @@ def index():
                 align-items: center;
                 gap: 15px;
             }
+            .api-key-input {
+                background: var(--bg-primary);
+                color: var(--text-main);
+                border: 1px solid var(--border-color);
+                padding: 6px 12px;
+                border-radius: 4px;
+                width: 220px;
+                font-size: 0.85rem;
+            }
             .lang-select {
                 background: var(--bg-tertiary);
                 color: var(--text-main);
@@ -277,6 +343,7 @@ def index():
                 display: flex;
                 gap: 15px;
                 align-items: center;
+                flex-wrap: wrap;
             }
             .btn {
                 background-color: var(--accent-cyan);
@@ -311,6 +378,7 @@ def index():
                 gap: 5px;
             }
             .layer-box {
+                background-color: var(--bg-tertiator);
                 background-color: var(--bg-tertiary);
                 border: 1px solid var(--accent-blue);
                 padding: 8px 12px;
@@ -367,9 +435,10 @@ def index():
         
         <div class="main-content">
             <div class="topbar">
-                <div style="font-size: 1.2rem;" id="topbar-title">制御プレーン / 概要</div>
+                <div style="font-size: 1.2rem;" id="topbar-title">制御プレーン / BYOKモード</div>
                 <div class="topbar-right">
-                    <span>ステータス: <span style="color: var(--status-allowed);">● オンライン</span></span>
+                    <!-- ユーザーが自分のAPIキーを入れる欄（サーバー代0円の秘訣） -->
+                    <input type="password" id="apiKeyInput" class="api-key-input" placeholder="OpenAI API Key (sk-...)" onchange="saveApiKey()">
                     <select class="lang-select" id="langSelect" onchange="changeLanguage()">
                         <option value="ja">日本語</option>
                         <option value="en">English</option>
@@ -378,7 +447,6 @@ def index():
             </div>
             
             <div class="content-area">
-                <!-- Metrics -->
                 <div class="metrics-grid">
                     <div class="metric-card">
                         <div class="metric-title" id="lbl-total">総AIアクション数</div>
@@ -398,29 +466,27 @@ def index():
                     </div>
                 </div>
 
-                <!-- Manual Test Action Panel (勝手に動かない手動テスト用) -->
                 <div class="action-panel">
-                    <div style="font-weight: bold;" id="lbl-test-panel">AIアクション手動テスト:</div>
-                    <button class="btn" onclick="sendTestAction('allowed')" id="btn-allowed">正常アクションを送信 (ALLOW)</button>
-                    <button class="btn" onclick="sendTestAction('blocked')" style="background-color: var(--status-blocked); color: white;" id="btn-blocked">不正アクションを送信 (BLOCK)</button>
+                    <div style="font-weight: bold;" id="lbl-test-panel">AI意図検証テスト (LLM連携):</div>
+                    <button class="btn" onclick="sendTestAction('allowed')" id="btn-allowed">安全なアクションを送信</button>
+                    <button class="btn" onclick="sendTestAction('blocked')" style="background-color: var(--status-blocked); color: white;" id="btn-blocked">矛盾した危険な意図を送信</button>
+                    <span style="font-size: 0.8rem; color: var(--text-muted);" id="lbl-key-notice">※APIキーを入力すると、本物のGPT-4o-miniが意味論を解析します。未入力でもフォールバック動作します。</span>
                 </div>
 
-                <!-- 8 Layers Visual -->
                 <div class="layer-section">
-                    <h3 class="layer-title" id="lbl-pipeline">VCP 8層セキュリティ強制パイプライン</h3>
+                    <h3 class="layer-title" id="lbl-pipeline">VCP 8層セキュリティ強制パイプライン (LLM統合)</h3>
                     <div class="layers-container">
-                        <div class="layer-box">1. 認証 (Identity)</div>➔
-                        <div class="layer-box">2. 権限 (Authority)</div>➔
-                        <div class="layer-box">3. 意図 (Intent)</div>➔
-                        <div class="layer-box">4. 規程 (Policy)</div>➔
-                        <div class="layer-box">5. 委譲 (Delegation)</div>➔
-                        <div class="layer-box" style="border-color: var(--status-blocked);">6. 実行 (AEG)</div>➔
-                        <div class="layer-box">7. 証拠 (Evidence)</div>➔
-                        <div class="layer-box">8. 復旧 (Recovery)</div>
+                        <div class="layer-box">1. 認証</div>➔
+                        <div class="layer-box">2. 権限</div>➔
+                        <div class="layer-box" style="border-color: var(--accent-cyan); font-weight: bold;">3. 意図(LLM)</div>➔
+                        <div class="layer-box">4. 規程</div>➔
+                        <div class="layer-box">5. 委譲</div>➔
+                        <div class="layer-box" style="border-color: var(--status-blocked);">6. 実行(AEG)</div>➔
+                        <div class="layer-box">7. 証拠</div>➔
+                        <div class="layer-box">8. 復旧</div>
                     </div>
                 </div>
 
-                <!-- Evidence Ledger -->
                 <div class="table-container">
                     <h3 class="layer-title" id="lbl-ledger">リアルタイム証拠台帳 (監査証跡)</h3>
                     <table>
@@ -430,12 +496,11 @@ def index():
                                 <th id="th-id">証拠 ID</th>
                                 <th id="th-agent">エージェント ID</th>
                                 <th id="th-action">アクション</th>
-                                <th id="th-recovery">リカバリー契約</th>
+                                <th id="th-method">検証方式</th>
                                 <th id="th-decision">判定結果</th>
                             </tr>
                         </thead>
                         <tbody id="ledger-body">
-                            <!-- JS injected rows -->
                         </tbody>
                     </table>
                 </div>
@@ -445,59 +510,42 @@ def index():
         <script>
             let currentLang = 'ja';
 
+            // ページ読み込み時にローカルストレージからAPIキーを復元
+            window.onload = function() {
+                const savedKey = localStorage.getItem('vcp_user_openai_key');
+                if (savedKey) {
+                    document.getElementById('apiKeyInput').value = savedKey;
+                }
+                refreshDashboard();
+            };
+
+            function saveApiKey() {
+                const key = document.getElementById('apiKeyInput').value;
+                localStorage.setItem('vcp_user_openai_key', key);
+            }
+
             const translations = {
                 ja: {
-                    dash: "ダッシュボード",
-                    auth: "権限血統図 (Authority)",
-                    policy: "ポリシーエンジン",
-                    audit: "監査ログ (Evidence)",
-                    agents: "エージェント管理",
-                    topTitle: "制御プレーン / 概要",
-                    lblTotal: "総AIアクション数",
-                    lblBlocked: "VCPブロック数",
-                    lblAgents: "稼働中エージェント",
-                    lblThreat: "脅威レベル",
-                    testPanel: "AIアクション手動テスト:",
-                    btnAllowed: "正常アクションを送信 (ALLOW)",
-                    btnBlocked: "不正アクションを送信 (BLOCK)",
-                    pipeline: "VCP 8層セキュリティ強制パイプライン",
-                    ledger: "リアルタイム証拠台帳 (監査証跡)",
-                    thTime: "時刻",
-                    thId: "証拠 ID",
-                    thAgent: "エージェント ID",
-                    thAction: "アクション",
-                    thRecovery: "リカバリー契約",
-                    thDecision: "判定結果"
+                    dash: "ダッシュボード", auth: "権限血統図 (Authority)", policy: "ポリシーエンジン", audit: "監査ログ (Evidence)", agents: "エージェント管理",
+                    topTitle: "制御プレーン / BYOKモード", lblTotal: "総AIアクション数", lblBlocked: "VCPブロック数", lblAgents: "稼働中エージェント", lblThreat: "脅威レベル",
+                    testPanel: "AI意図検証テスト (LLM連携):", btnAllowed: "安全なアクションを送信", btnBlocked: "矛盾した危険な意図を送信",
+                    keyNotice: "※APIキーを入力すると、本物のGPT-4o-miniが意味論を解析します。",
+                    pipeline: "VCP 8層セキュリティ強制パイプライン (LLM統合)", ledger: "リアルタイム証拠台帳 (監査証跡)",
+                    thTime: "時刻", thId: "証拠 ID", thAgent: "エージェント ID", thAction: "アクション", thMethod: "検証方式", thDecision: "判定結果"
                 },
                 en: {
-                    dash: "Dashboard",
-                    auth: "Authority Graph",
-                    policy: "Policy Engine",
-                    audit: "Evidence Audit",
-                    agents: "Agent Registry",
-                    topTitle: "Control Plane / Overview",
-                    lblTotal: "Total AI Actions",
-                    lblBlocked: "Blocked by VCP",
-                    lblAgents: "Active Agents",
-                    lblThreat: "Threat Level",
-                    testPanel: "Manual AI Action Test:",
-                    btnAllowed: "Send Valid Action (ALLOW)",
-                    btnBlocked: "Send Malicious Action (BLOCK)",
-                    pipeline: "VCP 8-Layer Enforcement Pipeline",
-                    ledger: "Live Evidence Ledger (Audit Trail)",
-                    thTime: "Timestamp",
-                    thId: "Evidence ID",
-                    thAgent: "Agent ID",
-                    thAction: "Action",
-                    thRecovery: "Recovery Contract",
-                    thDecision: "Decision"
+                    dash: "Dashboard", auth: "Authority Graph", policy: "Policy Engine", audit: "Evidence Audit", agents: "Agent Registry",
+                    topTitle: "Control Plane / BYOK Mode", lblTotal: "Total AI Actions", lblBlocked: "Blocked by VCP", lblAgents: "Active Agents", lblThreat: "Threat Level",
+                    testPanel: "AI Intent Test (LLM Integration):", btnAllowed: "Send Safe Action", btnBlocked: "Send Deceptive Action",
+                    keyNotice: "*Enter API key to use real GPT-4o-mini semantic analysis.",
+                    pipeline: "VCP 8-Layer Enforcement Pipeline (LLM Integrated)", ledger: "Live Evidence Ledger (Audit Trail)",
+                    thTime: "Timestamp", thId: "Evidence ID", thAgent: "Agent ID", thAction: "Action", thMethod: "Verification", thDecision: "Decision"
                 }
             };
 
             function changeLanguage() {
                 currentLang = document.getElementById('langSelect').value;
                 const t = translations[currentLang];
-                
                 document.getElementById('menu-dash').innerText = t.dash;
                 document.getElementById('menu-graph').innerText = t.auth;
                 document.getElementById('menu-policy').innerText = t.policy;
@@ -511,13 +559,14 @@ def index():
                 document.getElementById('lbl-test-panel').innerText = t.testPanel;
                 document.getElementById('btn-allowed').innerText = t.btnAllowed;
                 document.getElementById('btn-blocked').innerText = t.btnBlocked;
+                document.getElementById('lbl-key-notice').innerText = t.keyNotice;
                 document.getElementById('lbl-pipeline').innerText = t.pipeline;
                 document.getElementById('lbl-ledger').innerText = t.ledger;
                 document.getElementById('th-time').innerText = t.thTime;
                 document.getElementById('th-id').innerText = t.thId;
                 document.getElementById('th-agent').innerText = t.thAgent;
                 document.getElementById('th-action').innerText = t.thAction;
-                document.getElementById('th-recovery').innerText = t.thRecovery;
+                document.getElementById('th-method').innerText = t.thMethod;
                 document.getElementById('th-decision').innerText = t.thDecision;
             }
 
@@ -543,17 +592,16 @@ def index():
                             const statusBadge = log.status === 'ALLOWED' 
                                 ? `<span class="badge allowed">ALLOW</span>` 
                                 : `<span class="badge blocked">BLOCK</span>`;
-                            const recoveryBadge = `<span class="badge mode">${log.recovery_mode}</span>`;
+                            const methodBadge = `<span class="badge mode">${log.verification_method}</span>`;
                             
                             const tr = document.createElement('tr');
                             tr.innerHTML = `
-                                <td>${date}</td>
-                                <td style="font-family: monospace; color: var(--text-muted);">${log.evidence_id}</td>
-                                <td>${log.agent_id}</td>
-                                <td>${log.action_type}</td>
-                                <td>${recoveryBadge}</td>
-                                <td>${statusBadge}</td>
-                            `;
+                                ` + `<td>${date}</td>` +
+                                `<td style="font-family: monospace; color: var(--text-muted);">${log.evidence_id}</td>` +
+                                `<td>${log.agent_id}</td>` +
+                                `<td>${log.action_type}</td>` +
+                                `<td>${methodBadge}</td>` +
+                                `<td>${statusBadge}</td>`;
                             tbody.appendChild(tr);
                         });
                     }
@@ -562,25 +610,36 @@ def index():
                 }
             }
 
-            // 手動テスト用関数（勝手に動くのを廃止し、ボタンを押したときだけ実行）
             async function sendTestAction(type) {
+                const apiKey = document.getElementById('apiKeyInput').value;
                 let testAction;
+                
                 if (type === 'allowed') {
-                    testAction = { agent_id: "agent-mai-001", intent: "pay vendor safely", action: "payment_execute", parameters: {amount: 5000} };
+                    testAction = { 
+                        agent_id: "agent-mai-001", 
+                        intent: "I want to safely process a routine customer payment of 5000 yen.", 
+                        action: "payment_execute", 
+                        parameters: {amount: 5000} 
+                    };
                 } else {
-                    testAction = { agent_id: "agent-sub-002", intent: "delete log without permission", action: "delete_files" };
+                    // 意図と言葉が矛盾している（AIの嘘を見抜くテスト）
+                    testAction = { 
+                        agent_id: "agent-mai-001", 
+                        intent: "I want to greet the user politely and say hello.", // 嘘の意図
+                        action: "delete_files" // 実際の危険なアクション
+                    };
                 }
                 
                 await fetch('/vcp/gate', {
                     method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-API-Key': apiKey
+                    },
                     body: JSON.stringify(testAction)
                 });
                 refreshDashboard();
             }
-
-            refreshDashboard();
-            // 自動シミュレーションは停止しました（setIntervalを削除）
         </script>
     </body>
     </html>
