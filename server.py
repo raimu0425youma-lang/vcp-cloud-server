@@ -7,6 +7,8 @@ CORS(app)
 
 @app.route("/")
 def index():
+    if os.path.exists("static/index.html"):
+        return send_file("static/index.html")
     return send_file("index.html")
 
 @app.route("/api/health", methods=["GET"])
