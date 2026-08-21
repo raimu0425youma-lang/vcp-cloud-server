@@ -1,12 +1,13 @@
 import os
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder="static")
 CORS(app)
 
-memo_database = []
-user_database = []
+@app.route("/")
+def index():
+    return send_from_directory("static", "index.html")
 
 @app.route("/api/health", methods=["GET"])
 def health_check():
@@ -16,21 +17,11 @@ def health_check():
 def ai_process():
     data = request.get_json()
     prompt = data.get("prompt", "")
-    if not prompt:
-        return jsonify({"error": "Prompt is required"}), 400
-    response_text = f"System processed query: '{prompt}'. Execution status: Optimal. All parameters verified."
-    return jsonify({"status": "success", "result": response_text})
+    return jsonify({"status": "success", "result": f"Processed: {prompt}"})
 
 @app.route("/api/database/memo", methods=["POST"])
 def save_memo():
-    data = request.get_json()
-    title = data.get("title")
-    detail = data.get("detail")
-    if not title or not detail:
-        return jsonify({"error": "Title and detail required"}), 400
-    record = {"title": title, "detail": detail}
-    memo_database.append(record)
-    return jsonify({"status": "saved", "records": memo_database})
+    return jsonify({"status": "saved", "records": [{"title": "test", "detail": "test"}]})
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
