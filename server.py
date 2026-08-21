@@ -1,5 +1,5 @@
 import os
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, request, send_file
 from flask_cors import CORS
 
 app = Flask(__name__, static_folder="static")
@@ -7,7 +7,7 @@ CORS(app)
 
 @app.route("/")
 def index():
-    return send_from_directory("static", "index.html")
+    return send_file("index.html")
 
 @app.route("/api/health", methods=["GET"])
 def health_check():
@@ -15,7 +15,7 @@ def health_check():
 
 @app.route("/api/ai/process", methods=["POST"])
 def ai_process():
-    data = request.get_json()
+    data = request.get_json() or {}
     prompt = data.get("prompt", "")
     return jsonify({"status": "success", "result": f"Processed: {prompt}"})
 
