@@ -3,91 +3,121 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VCP Enterprise Control Center | Production Grid</title>
+    <title>VCP Management Console</title>
     <style>
         :root {
-            --bg-color: #0b0f19;
-            --card-bg: #111827;
-            --border-color: #1f2937;
-            --accent: #3b82f6;
-            --text-main: #f3f4f6;
-            --text-muted: #9ca3af;
-            --success: #10b981;
-            --warning: #f59e0b;
-            --danger: #ef4444;
+            --bg-main: #0f172a;
+            --panel-bg: #1e293b;
+            --border-color: #334155;
+            --primary: #2563eb;
+            --text-title: #f8fafc;
+            --text-sub: #94a3b8;
+            --success-bg: rgba(16, 185, 129, 0.15);
+            --success-color: #34d399;
+            --warning-bg: rgba(245, 158, 11, 0.15);
+            --warning-color: #fbbf24;
+            --danger-bg: rgba(239, 68, 68, 0.15);
+            --danger-color: #f87171;
         }
+
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-        body { background-color: var(--bg-color); color: var(--text-main); padding: 2rem; min-height: 100vh; }
-        header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; border-bottom: 1px solid var(--border-color); padding-bottom: 1rem; }
-        h1 { font-size: 1.4rem; font-weight: 700; letter-spacing: 0.05em; }
-        .status-badge { font-size: 0.75rem; background: rgba(16, 185, 129, 0.1); color: var(--success); border: 1px solid var(--success); padding: 0.25rem 0.75rem; border-radius: 9999px; font-weight: 600; }
-        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 1.5rem; }
-        .card { background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 1rem; padding: 1.5rem; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
-        .card h2 { font-size: 1.1rem; margin-bottom: 1rem; color: var(--text-main); border-left: 3px solid var(--accent); padding-left: 0.5rem; }
+        body { background-color: var(--bg-main); color: var(--text-title); padding: 2rem; min-height: 100vh; }
+        
+        header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 1.5rem; margin-bottom: 2rem; border-bottom: 1px solid var(--border-color); }
+        .system-title { font-size: 1.25rem; font-weight: 700; letter-spacing: 0.05em; }
+        .status-badge { font-size: 0.8rem; padding: 0.3rem 0.8rem; background: var(--success-bg); color: var(--success-color); border: 1px solid var(--success-color); border-radius: 9999px; font-weight: 600; }
+
+        .container { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; }
+        @media (max-width: 900px) { .container { grid-template-columns: 1fr; } }
+
+        .card { background: var(--panel-bg); border: 1px solid var(--border-color); border-radius: 0.75rem; padding: 1.5rem; }
+        .card-title { font-size: 1rem; font-weight: 600; margin-bottom: 1.25rem; padding-left: 0.5rem; border-left: 4px solid var(--primary); }
+
         .form-group { margin-bottom: 1rem; }
-        label { display: block; font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.3rem; }
-        input, select { width: 100%; padding: 0.75rem; background: #030712; border: 1px solid var(--border-color); color: white; border-radius: 0.5rem; font-size: 0.95rem; }
-        input:focus, select:focus { outline: none; border-color: var(--accent); }
-        button { width: 100%; background: var(--accent); color: white; border: none; padding: 0.75rem; border-radius: 0.5rem; font-weight: 600; cursor: pointer; transition: background 0.2s; margin-top: 0.5rem; }
-        button:hover { background: #1d4ed8; }
-        button.secondary { background: #374151; }
-        button.secondary:hover { background: #4b5563; }
-        .result-box { margin-top: 1rem; background: #030712; border: 1px solid var(--border-color); border-radius: 0.5rem; padding: 1rem; font-family: monospace; font-size: 0.8rem; min-height: 120px; max-height: 250px; overflow-y: auto; color: var(--text-muted); word-break: break-all; white-space: pre-wrap; }
-        .allowed { color: var(--success); border-color: var(--success); }
-        .human { color: var(--warning); border-color: var(--warning); }
-        .blocked { color: var(--danger); border-color: var(--danger); }
+        label { display: block; font-size: 0.85rem; color: var(--text-sub); margin-bottom: 0.4rem; }
+        input, select { width: 100%; padding: 0.75rem; background: #0f172a; border: 1px solid var(--border-color); color: #fff; border-radius: 0.375rem; font-size: 0.9rem; }
+        input:focus, select:focus { outline: none; border-color: var(--primary); }
+
+        button { width: 100%; background: var(--primary); color: #fff; border: none; padding: 0.8rem; border-radius: 0.375rem; font-weight: 600; font-size: 0.9rem; cursor: pointer; margin-top: 0.5rem; }
+        button:hover { opacity: 0.9; }
+        button.btn-secondary { background: #475569; }
+
+        .result-panel { margin-top: 1.5rem; padding: 1rem; border-radius: 0.375rem; background: #0f172a; border: 1px solid var(--border-color); min-height: 140px; }
+        .status-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem; font-weight: 700; font-size: 1rem; }
+        
+        .status-ALLOWED { color: var(--success-color); }
+        .status-HUMAN_APPROVAL { color: var(--warning-color); }
+        .status-BLOCKED { color: var(--danger-color); }
+
+        .info-row { display: flex; justify-content: space-between; margin-bottom: 0.5rem; font-size: 0.85rem; }
+        .info-label { color: var(--text-sub); }
+        .info-value { font-family: monospace; word-break: break-all; }
+
+        .hash-code { background: #1e293b; padding: 0.5rem; border-radius: 0.25rem; font-family: monospace; font-size: 0.75rem; color: var(--text-sub); margin-top: 0.5rem; word-break: break-all; }
     </style>
 </head>
 <body>
+
     <header>
-        <h1>VCP ENTERPRISE CONTROL CENTER</h1>
-        <div class="status-badge">PRODUCTION GRID ONLINE</div>
+        <div class="system-title">VCP MANAGEMENT CONSOLE</div>
+        <div class="status-badge">SYSTEM ACTIVE</div>
     </header>
 
-    <div class="grid">
+    <div class="container">
+        <!-- 制御判定カード -->
         <div class="card">
-            <h2>セキュリティ・ゲート評価テスト</h2>
-            <form id="vcpForm">
+            <div class="card-title">AI指示の安全チェック（ゲート評価）</div>
+            <form id="gateForm">
                 <div class="form-group">
-                    <label>APIキー (初期値: vcp_live_secret_key_001)</label>
+                    <label>アクセスキー</label>
                     <input type="text" id="api_key" value="vcp_live_secret_key_001">
                 </div>
                 <div class="form-group">
-                    <label>エージェントID</label>
+                    <label>操作対象のAI（エージェントID）</label>
                     <input type="text" id="agent_id" value="agent-003">
                 </div>
                 <div class="form-group">
-                    <label>実行アクション</label>
+                    <label>実行させたい操作</label>
                     <select id="action">
-                        <option value="transfer">transfer</option>
-                        <option value="read">read</option>
+                        <option value="transfer">送金処理 (transfer)</option>
+                        <option value="read">データ閲覧 (read)</option>
                     </select>
                 </div>
                 <div class="form-group">
-                    <label>金額 / リスク値</label>
+                    <label>処理金額・リスク値</label>
                     <input type="number" id="amount" value="5000">
                 </div>
-                <button type="submit">VCPコアへディスパッチ</button>
+                <button type="submit">判定を実行する</button>
             </form>
-            <div id="vcpResult" class="result-box">評価データ待機中</div>
+
+            <div class="result-panel" id="gateResultDisplay">
+                <div style="color: var(--text-sub); font-size: 0.85rem; text-align: center; margin-top: 2rem;">
+                    フォームを入力して判定ボタンを押してください
+                </div>
+            </div>
         </div>
 
+        <!-- 監査検証カード -->
         <div class="card">
-            <h2>フォレンジック監査</h2>
-            <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 1rem;">
-                蓄積されたすべての証跡ログのハッシュ連鎖を検証します。
+            <div class="card-title">データ改ざんの検証（監査記録）</div>
+            <p style="font-size: 0.85rem; color: var(--text-sub); margin-bottom: 1.5rem;">
+                これまでの操作ログが一切改ざんされていないか、暗号化チェーンをチェックします。
             </p>
-            <button class="secondary" onclick="verifyChain()">監査チェーンの整合性を検証する</button>
-            <div id="auditResult" class="result-box" style="margin-top: 1.5rem;">検証レポート未実行</div>
+            <button class="btn-secondary" onclick="runAuditCheck()">監査チェックを実行</button>
+
+            <div class="result-panel" id="auditResultDisplay" style="margin-top: 1.5rem;">
+                <div style="color: var(--text-sub); font-size: 0.85rem; text-align: center; margin-top: 2rem;">
+                    チェックボタンを押すと結果が表示されます
+                </div>
+            </div>
         </div>
     </div>
 
     <script>
-        document.getElementById('vcpForm').addEventListener('submit', async (e) => {
+        document.getElementById('gateForm').addEventListener('submit', async (e) => {
             e.preventDefault();
-            const resultBox = document.getElementById('vcpResult');
-            resultBox.className = 'result-box';
-            resultBox.innerText = 'セキュリティポリシー評価中...';
+            const display = document.getElementById('gateResultDisplay');
+            display.innerHTML = '<div style="color: var(--text-sub); font-size: 0.85rem; text-align: center; margin-top: 2rem;">判定中...</div>';
 
             const payload = {
                 api_key: document.getElementById('api_key').value,
@@ -103,34 +133,84 @@
                     body: JSON.stringify(payload)
                 });
                 const data = await response.json();
-                resultBox.innerText = JSON.stringify(data, null, 2);
 
-                if (data.status === 'ALLOWED') resultBox.classList.add('allowed');
-                else if (data.status === 'HUMAN_APPROVAL') resultBox.classList.add('human');
-                else resultBox.classList.add('blocked');
+                let statusText = '';
+                let statusClass = '';
+                let detailMessage = '';
+
+                if (data.status === 'ALLOWED') {
+                    statusText = '許可（自動承認）';
+                    statusClass = 'status-ALLOWED';
+                    detailMessage = '権限と金額の安全性が確認されました。';
+                } else if (data.status === 'HUMAN_APPROVAL') {
+                    statusText = '保留（管理者の承認が必要）';
+                    statusClass = 'status-HUMAN_APPROVAL';
+                    detailMessage = '設定された上限金額を超えているため、人間の承認が必要です。';
+                } else {
+                    statusText = '拒否（アクセス遮断）';
+                    statusClass = 'status-BLOCKED';
+                    detailMessage = '権限の不一致または制限を超過しているため拒否されました。';
+                }
+
+                let chainInfo = data.verified_chain ? data.verified_chain[0].join(' → ') : 'なし';
+
+                display.innerHTML = `
+                    <div class="status-header ${statusClass}">
+                        <span>判定結果: ${statusText}</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">詳細理由:</span>
+                        <span class="info-value">${data.reason || '-'}</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">確認された権限経路:</span>
+                        <span class="info-value">${chainInfo}</span>
+                    </div>
+                    <div style="margin-top: 0.75rem;">
+                        <span class="info-label">証明用暗号ハッシュ:</span>
+                        <div class="hash-code">${data.evidence_hash || 'なし'}</div>
+                    </div>
+                `;
+
             } catch (err) {
-                resultBox.innerText = '接続エラー: ' + err.message;
-                resultBox.classList.add('blocked');
+                display.innerHTML = `<div class="status-header status-BLOCKED">エラーが発生しました</div><div class="info-row"><span class="info-label">${err.message}</span></div>`;
             }
         });
 
-        async function verifyChain() {
-            const auditBox = document.getElementById('auditResult');
-            auditBox.className = 'result-box';
-            auditBox.innerText = '全ブロックのハッシュ連鎖を検証中...';
+        async function runAuditCheck() {
+            const display = document.getElementById('auditResultDisplay');
+            display.innerHTML = '<div style="color: var(--text-sub); font-size: 0.85rem; text-align: center; margin-top: 2rem;">検証中...</div>';
 
             try {
                 const response = await fetch('/vcp/audit/verify');
                 const data = await response.json();
-                auditBox.innerText = JSON.stringify(data, null, 2);
+
+                let statusText = '';
+                let statusClass = '';
+
                 if (data.chain_status === 'SECURE_AND_VERIFIED') {
-                    auditBox.classList.add('allowed');
+                    statusText = '正常（改ざんなし）';
+                    statusClass = 'status-ALLOWED';
                 } else {
-                    auditBox.classList.add('blocked');
+                    statusText = '警告（改ざん検知）';
+                    statusClass = 'status-BLOCKED';
                 }
+
+                display.innerHTML = `
+                    <div class="status-header ${statusClass}">
+                        <span>ログ整合性: ${statusText}</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">記録されている総データ件数:</span>
+                        <span class="info-value">${data.total_records} 件</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">暗号チェーン状態:</span>
+                        <span class="info-value">${data.chain_status}</span>
+                    </div>
+                `;
             } catch (err) {
-                auditBox.innerText = '検証エラー: ' + err.message;
-                auditBox.classList.add('blocked');
+                display.innerHTML = `<div class="status-header status-BLOCKED">検証エラー</div><div class="info-row"><span class="info-label">${err.message}</span></div>`;
             }
         }
     </script>
