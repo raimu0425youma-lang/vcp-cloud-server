@@ -2,117 +2,56 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VCP Enterprise Control Center | AI Governance Grid</title>
+    <title>VCP エンタープライズ制御センター</title>
     <style>
-        :root {
-            --bg-color: #0b0f19;
-            --card-bg: #111827;
-            --border-color: #1f2937;
-            --accent-glow: #3b82f6;
-            --text-main: #f3f4f6;
-            --text-muted: #9ca3af;
-            --success: #10b981;
-            --danger: #ef4444;
-        }
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-        body { background-color: var(--bg-color); color: var(--text-main); padding: 2rem; min-height: 100vh; }
-        header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; border-bottom: 1px solid var(--border-color); padding-bottom: 1rem; }
-        h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: 0.05em; display: flex; align-items: center; gap: 0.5rem; }
-        .status-badge { font-size: 0.75rem; background: rgba(16, 185, 129, 0.1); color: var(--success); border: 1px solid var(--success); padding: 0.25rem 0.75rem; border-radius: 9999px; font-weight: 600; }
-        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.5rem; }
-        .card { background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 1rem; padding: 1.5rem; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
-        .card h2 { font-size: 1.1rem; margin-bottom: 1rem; color: var(--text-main); border-left: 3px solid var(--accent-glow); padding-left: 0.5rem; }
+        :root { --bg-color: #0b0f19; --card-bg: #111827; --accent: #3b82f6; --text: #f3f4f6; }
+        body { background-color: var(--bg-color); color: var(--text); padding: 2rem; font-family: sans-serif; }
+        .card { background: var(--card-bg); padding: 2rem; border-radius: 1rem; border: 1px solid #374151; }
+        h1 { margin-bottom: 1.5rem; font-size: 1.5rem; }
         .form-group { margin-bottom: 1rem; }
-        label { display: block; font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.3rem; }
-        input, select { width: 100%; padding: 0.75rem; background: #030712; border: 1px solid var(--border-color); color: white; border-radius: 0.5rem; font-size: 0.95rem; }
-        input:focus, select:focus { outline: none; border-color: var(--accent-glow); }
-        button { width: 100%; background: #2563eb; color: white; border: none; padding: 0.75rem; border-radius: 0.5rem; font-weight: 600; cursor: pointer; transition: background 0.2s; margin-top: 0.5rem; }
-        button:hover { background: #1d4ed8; }
-        .result-box { margin-top: 1rem; background: #030712; border: 1px solid var(--border-color); border-radius: 0.5rem; padding: 1rem; font-family: monospace; font-size: 0.85rem; min-height: 80px; color: var(--text-muted); word-break: break-all; }
-        .result-box.allowed { color: var(--success); border-color: var(--success); }
-        .result-box.blocked { color: var(--danger); border-color: var(--danger); }
+        label { display: block; margin-bottom: 0.5rem; color: #9ca3af; }
+        input, select { width: 100%; padding: 0.5rem; background: #030712; border: 1px solid #374151; color: white; }
+        button { width: 100%; padding: 0.75rem; background: var(--accent); color: white; border: none; cursor: pointer; margin-top: 1rem; }
+        #vcpResult { margin-top: 1rem; padding: 1rem; background: #000; border: 1px solid #4b5563; }
     </style>
 </head>
 <body>
-    <header>
-        <h1>⚡ VCP ENTERPRISE CONTROL CENTER</h1>
-        <div class="status-badge">CORE ONLINE (DETERMINISTIC GRID)</div>
-    </header>
-
-    <div class="grid">
-        <!-- VCP Gate Simulator -->
-        <div class="card">
-            <h2>VCP Gate Security Test</h2>
-            <form id="vcpForm">
-                <div class="form-group">
-                    <label>Agent ID</label>
-                    <input type="text" id="agent_id" value="agent-001">
-                </div>
-                <div class="form-group">
-                    <label>Target Action</label>
-                    <select id="action">
-                        <option value="transfer">transfer (Financial)</option>
-                        <option value="read">read (Data Access)</option>
-                        <option value="delete_files">delete_files (High Risk)</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>Amount / Risk Value</label>
-                    <input type="number" id="amount" value="500">
-                </div>
-                <button type="submit">Dispatch to VCP Core</button>
-            </form>
-            <div id="vcpResult" class="result-box">Awaiting security dispatch...</div>
+    <div class="card">
+        <h1>VCP エンタープライズ制御センター</h1>
+        <div class="form-group">
+            <label>エージェントID</label>
+            <input type="text" id="agent_id" value="agent-001">
         </div>
-
-        <!-- System Telemetry & Metrics -->
-        <div class="card">
-            <h2>Grid Telemetry & Status</h2>
-            <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1rem;">
-                Zero-Trust Deterministic Security Layer is actively protecting execution boundaries. No external API latency.
-            </p>
-            <div style="background: #030712; padding: 1rem; border-radius: 0.5rem; border: 1px solid var(--border-color);">
-                <div style="font-size: 0.8rem; color: var(--text-muted);">ACTIVE TENANT</div>
-                <div style="font-size: 1.1rem; font-weight: bold; margin-bottom: 0.5rem;">Enterprise-Global-Root</div>
-                <div style="font-size: 0.8rem; color: var(--text-muted);">ENFORCEMENT ENGINE</div>
-                <div style="font-size: 1.1rem; font-weight: bold;">Deterministic Policy V1</div>
-            </div>
+        <div class="form-group">
+            <label>実行アクション</label>
+            <select id="action">
+                <option value="transfer">送金 (Financial)</option>
+                <option value="read">データ読み取り (Read)</option>
+                <option value="delete_files">ファイル削除 (High Risk)</option>
+            </select>
         </div>
+        <div class="form-group">
+            <label>金額 / リスク値</label>
+            <input type="number" id="amount" value="500">
+        </div>
+        <button onclick="dispatch()">VCPコアへ送信</button>
+        <div id="vcpResult">判定待ち...</div>
     </div>
-
     <script>
-        document.getElementById('vcpForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const resultBox = document.getElementById('vcpResult');
-            resultBox.className = 'result-box';
-            resultBox.innerText = 'Evaluating security constraints...';
-
+        async function dispatch() {
             const payload = {
                 agent_id: document.getElementById('agent_id').value,
                 action: document.getElementById('action').value,
                 amount: parseFloat(document.getElementById('amount').value)
             };
-
-            try {
-                const response = await fetch('/vcp/gate', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-                const data = await response.json();
-                
-                resultBox.innerText = JSON.stringify(data, null, 2);
-                if (data.status === 'ALLOWED') {
-                    resultBox.classList.add('allowed');
-                } else {
-                    resultBox.classList.add('blocked');
-                }
-            } catch (err) {
-                resultBox.innerText = 'Error connecting to VCP Core: ' + err.message;
-                resultBox.classList.add('blocked');
-            }
-        });
+            const res = await fetch('/vcp/gate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const data = await res.json();
+            document.getElementById('vcpResult').innerText = JSON.stringify(data, null, 2);
+        }
     </script>
 </body>
 </html>
